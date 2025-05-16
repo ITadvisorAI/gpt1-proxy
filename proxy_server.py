@@ -20,3 +20,6 @@ def start_session():
 @app.route("/")
 def index():
     return "Proxy Server Running", 200
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 5000))  # default to 5000 for local testing
+    app.run(host="0.0.0.0", port=port)

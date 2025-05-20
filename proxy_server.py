@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, send_file
+from flask import Flask, request, jsonify
 from werkzeug.utils import secure_filename
 import requests
 import os
@@ -17,10 +17,10 @@ MAKE_WEBHOOK_START_ANALYSIS = os.getenv(
     "https://hook.us2.make.com/1ivi9q9x6l253tikb557hemgtl7n2bv9"
 )
 
-DRIVE_TEMP_FOLDER_ID = os.getenv("DRIVE_TEMP_FOLDER_ID")  # Must be set in Render or .env
+DRIVE_TEMP_FOLDER_ID = os.getenv("DRIVE_TEMP_FOLDER_ID")  # Set in Render dashboard
 SERVICE_ACCOUNT_FILE = "/etc/secrets/service_account.json"
 
-# === Google Drive Client Setup ===
+# === Google Drive Setup ===
 creds = service_account.Credentials.from_service_account_file(
     SERVICE_ACCOUNT_FILE,
     scopes=["https://www.googleapis.com/auth/drive"]
@@ -31,7 +31,7 @@ drive_service = build('drive', 'v3', credentials=creds)
 @app.route("/start_analysis", methods=["POST"])
 def start_analysis():
     try:
-        payload = request.get_json()
+        payload = request.get_json(force=True)
         if not payload:
             return jsonify({"error": "No JSON payload received"}), 400
 
@@ -42,13 +42,12 @@ def start_analysis():
         if not email or not goal or not files:
             return jsonify({"error": "Missing one or more required fields: email, goal, files"}), 400
 
-        headers = {"Content-Type": "application/json"}
-
         print("📩 Forwarding start_analysis request...")
         print(f"📧 Email: {email}")
         print(f"🎯 Goal: {goal}")
-        print(f"📎 File count: {len(files)}")
+        print(f"📎 Files received: {len(files)}")
 
+        headers = {"Content-Type": "application/json"}
         response = requests.post(MAKE_WEBHOOK_START_ANALYSIS, json=payload, headers=headers)
 
         return jsonify({
@@ -57,21 +56,24 @@ def start_analysis():
         }), response.status_code
 
     except Exception as e:
-        print("❌ Error during start_analysis forwarding:", str(e))
+        print("❌ Error in /start_analysis:", str(e))
         return jsonify({"error": str(e)}), 500
 
 # === POST /upload_to_drive ===
 @app.route("/upload_to_drive", methods=["POST"])
 def upload_to_drive():
     try:
+        if "file" not in request.files:
+            return jsonify({"error": "Missing file part in the request"}), 400
+
         uploaded_file = request.files["file"]
+        if uploaded_file.filename == "":
+            return jsonify({"error": "Uploaded file has no filename"}), 400
+
         file_type = request.form.get("type", "unspecified")
         email = request.form.get("email", "unknown@example.com")
-
-        if not uploaded_file:
-            return jsonify({"error": "No file received"}), 400
-
         filename = secure_filename(uploaded_file.filename)
+
         print(f"📤 Uploading: {filename} for user {email} (type: {file_type})")
 
         file_metadata = {
@@ -86,6 +88,8 @@ def upload_to_drive():
             fields='id, name, webViewLink'
         ).execute()
 
+        print(f"✅ File uploaded to Drive: {uploaded['id']}")
+
         return jsonify({
             "file_name": uploaded["name"],
             "file_id": uploaded["id"],
@@ -98,8 +102,8 @@ def upload_to_drive():
         print("❌ Upload error:", str(e))
         return jsonify({"error": str(e)}), 500
 
-# === GET /
-@app.route("/")
+# === GET / ===
+@app.route("/", methods=["GET"])
 def index():
     return "Proxy Server Running", 200
 

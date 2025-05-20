@@ -18,7 +18,7 @@ MAKE_WEBHOOK_START_ANALYSIS = os.getenv(
 )
 
 DRIVE_TEMP_FOLDER_ID = os.getenv("DRIVE_TEMP_FOLDER_ID")  # Must be set in Render or .env
-SERVICE_ACCOUNT_FILE = "/service_account.json"
+SERVICE_ACCOUNT_FILE = "/etc/secrets/service_account.json"
 
 # === Google Drive Client Setup ===
 creds = service_account.Credentials.from_service_account_file(

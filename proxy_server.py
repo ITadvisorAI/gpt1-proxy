@@ -4,28 +4,42 @@ import os
 
 app = Flask(__name__)
 
-# Webhook URLs for different tasks
-MAKE_WEBHOOK_START_SESSION = os.getenv("MAKE_WEBHOOK_START_SESSION", "https://hook.us2.make.com/1ivi9q9x6l253tikb557hemgtl7n2bv9")
-MAKE_WEBHOOK_UPLOAD_FILES = os.getenv("MAKE_WEBHOOK_UPLOAD_FILES", "https://hook.us2.make.com/5cbueoibwl1jf1tbp2nmjx99mbrns1ie")
+# Webhook URL for the unified analysis flow
+MAKE_WEBHOOK_START_ANALYSIS = os.getenv(
+    "MAKE_WEBHOOK_START_ANALYSIS",
+    "https://hook.us2.make.com/1ivi9q9x6l253tikb557hemgtl7n2bv9"  # Replace with your actual webhook if needed
+)
 
-@app.route("/start_session", methods=["POST"])
-def start_session():
+@app.route("/start_analysis", methods=["POST"])
+def start_analysis():
     try:
         payload = request.get_json()
-        headers = {"Content-Type": "application/json"}
-        response = requests.post(MAKE_WEBHOOK_START_SESSION, json=payload, headers=headers)
-        return jsonify({"status": response.status_code, "response": response.text}), response.status_code
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        if not payload:
+            return jsonify({"error": "No JSON payload received"}), 400
 
-@app.route("/upload_files", methods=["POST"])
-def upload_files():
-    try:
-        payload = request.get_json()
+        email = payload.get("email")
+        goal = payload.get("goal")
+        files = payload.get("files")
+
+        if not email or not goal or not files:
+            return jsonify({"error": "Missing one or more required fields: email, goal, files"}), 400
+
         headers = {"Content-Type": "application/json"}
-        response = requests.post(MAKE_WEBHOOK_UPLOAD_FILES, json=payload, headers=headers)
-        return jsonify({"status": response.status_code, "response": response.text}), response.status_code
+
+        print("📩 Forwarding start_analysis request...")
+        print(f"📧 Email: {email}")
+        print(f"🎯 Goal: {goal}")
+        print(f"📎 File count: {len(files)}")
+
+        response = requests.post(MAKE_WEBHOOK_START_ANALYSIS, json=payload, headers=headers)
+
+        return jsonify({
+            "status": response.status_code,
+            "response": response.text
+        }), response.status_code
+
     except Exception as e:
+        print("❌ Error during start_analysis forwarding:", str(e))
         return jsonify({"error": str(e)}), 500
 
 @app.route("/")

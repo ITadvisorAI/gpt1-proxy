@@ -5,17 +5,12 @@ import time
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 
-# === Flask App ===
 app = Flask(__name__)
 
 # === Environment Variables ===
-MAKE_WEBHOOK_START_ANALYSIS = os.getenv(
-    "MAKE_WEBHOOK_START_ANALYSIS",
-    "https://hook.us2.make.com/1ivi9q9x6l253tikb557hemgtl7n2bv9"
-)
-MAKE_WEBHOOK_START_ASSESSMENT = os.getenv(
-    "MAKE_WEBHOOK_START_ASSESSMENT",
-    "https://hook.us2.make.com/a1p3ejst8p6bu33ohgegf336anbdnrpj"
+GPT2_ENDPOINT = os.getenv(
+    "GPT2_ENDPOINT",
+    "https://gpt2-assessment.onrender.com/start_assessment"  # Replace with actual GPT2 Render URL
 )
 DRIVE_ROOT_FOLDER_ID = os.getenv("DRIVE_ROOT_FOLDER_ID")
 SERVICE_ACCOUNT_FILE = "/etc/secrets/service_account.json"
@@ -75,19 +70,6 @@ def start_analysis():
         folder_url = folder.get('webViewLink')
         print(f"[DEBUG] Folder created: {folder_url}")
 
-        tracker_payload = {
-            "session_id": session_id,
-            "email": email,
-            "goal": goal,
-            "folder_url": folder_url
-        }
-
-        headers = {"Content-Type": "application/json"}
-        response = requests.post(MAKE_WEBHOOK_START_ANALYSIS, json=tracker_payload, headers=headers)
-        response.raise_for_status()
-        print("[DEBUG] Make.com webhook triggered successfully")
-
-        # ✅ Return minimal response to avoid size errors
         return jsonify({
             "session_id": session_id,
             "folder_url": folder_url,
@@ -140,7 +122,7 @@ def list_files():
         print("❌ Error in /list_files:", str(e))
         return jsonify({"error": str(e)}), 500
 
-# === POST /start_assessment ===
+# === ✅ POST /start_assessment ===
 @app.route("/start_assessment", methods=["POST"])
 def start_assessment():
     try:
@@ -153,12 +135,12 @@ def start_assessment():
         if not session_id or not email or not goal or not files:
             return jsonify({"error": "Missing required fields"}), 400
 
-        print(f"[DEBUG] Starting assessment for: {session_id} ({email})")
+        print(f"[DEBUG] Triggering GPT2 Assessment for session: {session_id}")
         for f in files:
             print(f"[DEBUG] File: {f['file_name']} | Type: {f.get('type')} | URL: {f['file_url']}")
 
         headers = {"Content-Type": "application/json"}
-        response = requests.post(MAKE_WEBHOOK_START_ASSESSMENT, json=payload, headers=headers)
+        response = requests.post(GPT2_ENDPOINT, json=payload, headers=headers)
         response.raise_for_status()
 
         return jsonify({
@@ -175,7 +157,6 @@ def start_assessment():
 def index():
     return "Proxy Server Running", 200
 
-# === MAIN ===
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)

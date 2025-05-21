@@ -2,6 +2,7 @@ from flask import Flask, request, jsonify
 import requests
 import os
 import time
+import traceback
 
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
@@ -68,9 +69,12 @@ def start_analysis():
         }
 
         headers = {"Content-Type": "application/json"}
-        response = requests.post(MAKE_WEBHOOK_START_ANALYSIS, json=tracker_payload, headers=headers)
-        response.raise_for_status()
-        print("[DEBUG] Make.com webhook triggered successfully")
+        try:
+            response = requests.post(MAKE_WEBHOOK_START_ANALYSIS, json=tracker_payload, headers=headers)
+            response.raise_for_status()
+            print("[DEBUG] Make.com webhook triggered successfully")
+        except requests.exceptions.RequestException as e:
+            print(f"[ERROR] Failed to notify Make.com: {str(e)}")
 
         return jsonify({
             "session_id": session_id,
@@ -79,7 +83,7 @@ def start_analysis():
         }), 200
 
     except Exception as e:
-        print("❌ Error in /start_analysis:", str(e))
+        print("\n❌ Error in /start_analysis:\n", traceback.format_exc())
         return jsonify({"error": str(e)}), 500
 
 # === POST /start_assessment (for GPT2) ===
@@ -106,7 +110,7 @@ def start_assessment():
         }), 200
 
     except Exception as e:
-        print("❌ Error in /start_assessment:", str(e))
+        print("\n❌ Error in /start_assessment:\n", traceback.format_exc())
         return jsonify({"error": str(e)}), 500
 
 # === Health Check ===

@@ -2,7 +2,6 @@ from flask import Flask, request, jsonify
 import requests
 import os
 import time
-
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 
@@ -88,6 +87,7 @@ def start_analysis():
         response.raise_for_status()
         print("[DEBUG] Make.com webhook triggered successfully")
 
+        # ✅ Return minimal response to avoid size errors
         return jsonify({
             "session_id": session_id,
             "folder_url": folder_url,
@@ -155,7 +155,7 @@ def start_assessment():
 
         print(f"[DEBUG] Starting assessment for: {session_id} ({email})")
         for f in files:
-            print(f"[DEBUG] File: {f['file_name']} | Type: {f['type']} | URL: {f['file_url']}")
+            print(f"[DEBUG] File: {f['file_name']} | Type: {f.get('type')} | URL: {f['file_url']}")
 
         headers = {"Content-Type": "application/json"}
         response = requests.post(MAKE_WEBHOOK_START_ASSESSMENT, json=payload, headers=headers)

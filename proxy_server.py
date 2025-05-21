@@ -28,6 +28,25 @@ creds = service_account.Credentials.from_service_account_file(
 )
 drive_service = build('drive', 'v3', credentials=creds)
 
+# === Utility: Infer file type ===
+def infer_type(name):
+    name = name.lower()
+    if "asset" in name or "inventory" in name:
+        return "asset_inventory"
+    elif "capacity" in name or "scale" in name:
+        return "capacity_plan"
+    elif "log" in name or "latency" in name:
+        return "network_logs"
+    elif "compliance" in name:
+        return "compliance_report"
+    elif "firewall" in name:
+        return "firewall_rules"
+    elif "backup" in name:
+        return "backup_schedule"
+    elif "strategy" in name or "roadmap" in name:
+        return "strategy_input"
+    return "unspecified"
+
 # === POST /start_analysis ===
 @app.route("/start_analysis", methods=["POST"])
 def start_analysis():
@@ -99,27 +118,8 @@ def list_files():
             return jsonify({"error": f"No folder found for session_id: {session_id}"}), 404
 
         folder_id = folders[0]['id']
-
         file_query = f"'{folder_id}' in parents and trashed = false"
         files = drive_service.files().list(q=file_query, fields="files(id, name, mimeType, webViewLink)").execute().get('files', [])
-
-        def infer_type(name):
-            name = name.lower()
-            if "asset" in name or "inventory" in name:
-                return "asset_inventory"
-            elif "capacity" in name or "scale" in name:
-                return "capacity_plan"
-            elif "log" in name or "latency" in name:
-                return "network_logs"
-            elif "compliance" in name:
-                return "compliance_report"
-            elif "firewall" in name:
-                return "firewall_rules"
-            elif "backup" in name:
-                return "backup_schedule"
-            elif "strategy" in name or "roadmap" in name:
-                return "strategy_input"
-            return "unspecified"
 
         files_response = [
             {
@@ -154,6 +154,9 @@ def start_assessment():
             return jsonify({"error": "Missing required fields"}), 400
 
         print(f"[DEBUG] Starting assessment for: {session_id} ({email})")
+        for f in files:
+            print(f"[DEBUG] File: {f['file_name']} | Type: {f['type']} | URL: {f['file_url']}")
+
         headers = {"Content-Type": "application/json"}
         response = requests.post(MAKE_WEBHOOK_START_ASSESSMENT, json=payload, headers=headers)
         response.raise_for_status()

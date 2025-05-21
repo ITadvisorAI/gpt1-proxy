@@ -8,10 +8,7 @@ from googleapiclient.discovery import build
 app = Flask(__name__)
 
 # === Environment Variables ===
-GPT2_ENDPOINT = os.getenv(
-    "GPT2_ENDPOINT",
-    "https://gpt2-assessment.onrender.com/start_assessment"  # Replace with actual GPT2 Render URL
-)
+GPT2_ENDPOINT = os.getenv("GPT2_ENDPOINT", "https://it-assessment-api.onrender.com")  # base URL only
 DRIVE_ROOT_FOLDER_ID = os.getenv("DRIVE_ROOT_FOLDER_ID")
 SERVICE_ACCOUNT_FILE = "/etc/secrets/service_account.json"
 
@@ -22,7 +19,7 @@ creds = service_account.Credentials.from_service_account_file(
 )
 drive_service = build('drive', 'v3', credentials=creds)
 
-# === Utility: Infer file type ===
+# === Utility: Infer file type based on name
 def infer_type(name):
     name = name.lower()
     if "asset" in name or "inventory" in name:
@@ -56,6 +53,7 @@ def start_analysis():
         session_id = f"Temp_{timestamp}_{email}"
         print(f"[DEBUG] Creating session: {session_id}")
 
+        # Create Google Drive folder for session
         folder_metadata = {
             'name': session_id,
             'parents': [DRIVE_ROOT_FOLDER_ID],
@@ -93,6 +91,7 @@ def list_files():
 
         print(f"[DEBUG] Listing files for session: {session_id}")
 
+        # Locate the session folder
         folder_query = f"name = '{session_id}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false"
         folders = drive_service.files().list(q=folder_query, fields="files(id, name)").execute().get('files', [])
 
@@ -100,6 +99,8 @@ def list_files():
             return jsonify({"error": f"No folder found for session_id: {session_id}"}), 404
 
         folder_id = folders[0]['id']
+
+        # List files in the session folder
         file_query = f"'{folder_id}' in parents and trashed = false"
         files = drive_service.files().list(q=file_query, fields="files(id, name, mimeType, webViewLink)").execute().get('files', [])
 
@@ -122,7 +123,7 @@ def list_files():
         print("❌ Error in /list_files:", str(e))
         return jsonify({"error": str(e)}), 500
 
-# === ✅ POST /start_assessment ===
+# === POST /start_assessment ===
 @app.route("/start_assessment", methods=["POST"])
 def start_assessment():
     try:
@@ -139,8 +140,10 @@ def start_assessment():
         for f in files:
             print(f"[DEBUG] File: {f['file_name']} | Type: {f.get('type')} | URL: {f['file_url']}")
 
+        # Send POST to GPT2 endpoint with /start_assessment path
+        assessment_url = f"{GPT2_ENDPOINT.rstrip('/')}/start_assessment"
         headers = {"Content-Type": "application/json"}
-        response = requests.post(GPT2_ENDPOINT, json=payload, headers=headers)
+        response = requests.post(assessment_url, json=payload, headers=headers)
         response.raise_for_status()
 
         return jsonify({
@@ -157,6 +160,7 @@ def start_assessment():
 def index():
     return "Proxy Server Running", 200
 
+# === MAIN ===
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)

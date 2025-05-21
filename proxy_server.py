@@ -16,7 +16,7 @@ MAKE_WEBHOOK_START_ANALYSIS = os.getenv(
 )
 MAKE_WEBHOOK_START_ASSESSMENT = os.getenv(
     "MAKE_WEBHOOK_START_ASSESSMENT",
-    "https://hook.us2.make.com/placeholder-assessment-endpoint"
+    "https://hook.us2.make.com/a1p3ejst8p6bu33ohgegf336anbdnrpj"
 )
 DRIVE_ROOT_FOLDER_ID = os.getenv("DRIVE_ROOT_FOLDER_ID")
 SERVICE_ACCOUNT_FILE = "/etc/secrets/service_account.json"

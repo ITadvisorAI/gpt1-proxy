@@ -1,12 +1,9 @@
 from flask import Flask, request, jsonify
-from werkzeug.utils import secure_filename
 import requests
 import os
-import io
-
+import time
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
-from googleapiclient.http import MediaIoBaseUpload
 
 # === Flask App ===
 app = Flask(__name__)
@@ -17,7 +14,12 @@ MAKE_WEBHOOK_START_ANALYSIS = os.getenv(
     "https://hook.us2.make.com/1ivi9q9x6l253tikb557hemgtl7n2bv9"
 )
 
-DRIVE_TEMP_FOLDER_ID = os.getenv("DRIVE_TEMP_FOLDER_ID")  # Set in Render dashboard
+MAKE_WEBHOOK_START_ASSESSMENT = os.getenv(
+    "MAKE_WEBHOOK_START_ASSESSMENT",
+    "https://hook.us2.make.com/your_assessment_webhook_here"
+)
+
+DRIVE_ROOT_FOLDER_ID = os.getenv("DRIVE_ROOT_FOLDER_ID")  # Parent folder ID for all sessions
 SERVICE_ACCOUNT_FILE = "/etc/secrets/service_account.json"
 
 # === Google Drive Setup ===
@@ -32,74 +34,72 @@ drive_service = build('drive', 'v3', credentials=creds)
 def start_analysis():
     try:
         payload = request.get_json(force=True)
-        if not payload:
-            return jsonify({"error": "No JSON payload received"}), 400
-
         email = payload.get("email")
         goal = payload.get("goal")
-        files = payload.get("files")
 
-        if not email or not goal or not files:
-            return jsonify({"error": "Missing one or more required fields: email, goal, files"}), 400
+        if not email or not goal:
+            return jsonify({"error": "Missing required fields: email and goal"}), 400
 
-        print("📩 Forwarding start_analysis request...")
-        print(f"📧 Email: {email}")
-        print(f"🎯 Goal: {goal}")
-        print(f"📎 Files received: {len(files)}")
+        timestamp = time.strftime("%Y%m%d%H%M%S")
+        session_id = f"Temp_{timestamp}_{email}"
+        folder_metadata = {
+            'name': session_id,
+            'parents': [DRIVE_ROOT_FOLDER_ID],
+            'mimeType': 'application/vnd.google-apps.folder'
+        }
 
+        folder = drive_service.files().create(
+            body=folder_metadata,
+            fields='id, webViewLink'
+        ).execute()
+
+        folder_url = folder['webViewLink']
+        folder_id = folder['id']
+
+        # Optionally: update session tracker via Make.com
+        tracker_payload = {
+            "session_id": session_id,
+            "email": email,
+            "goal": goal,
+            "folder_url": folder_url
+        }
         headers = {"Content-Type": "application/json"}
-        response = requests.post(MAKE_WEBHOOK_START_ANALYSIS, json=payload, headers=headers)
+        response = requests.post(MAKE_WEBHOOK_START_ANALYSIS, json=tracker_payload, headers=headers)
 
         return jsonify({
-            "status": response.status_code,
-            "response": response.text
-        }), response.status_code
+            "session_id": session_id,
+            "folder_url": folder_url,
+            "status": "session_created"
+        }), 200
 
     except Exception as e:
         print("❌ Error in /start_analysis:", str(e))
         return jsonify({"error": str(e)}), 500
 
-# === POST /upload_to_drive ===
-@app.route("/upload_to_drive", methods=["POST"])
-def upload_to_drive():
+# === POST /start_assessment ===
+@app.route("/start_assessment", methods=["POST"])
+def start_assessment():
     try:
-        if "file" not in request.files:
-            return jsonify({"error": "Missing file part in the request"}), 400
+        payload = request.get_json(force=True)
 
-        uploaded_file = request.files["file"]
-        if uploaded_file.filename == "":
-            return jsonify({"error": "Uploaded file has no filename"}), 400
+        session_id = payload.get("session_id")
+        email = payload.get("email")
+        goal = payload.get("goal")
+        files = payload.get("files")
 
-        file_type = request.form.get("type", "unspecified")
-        email = request.form.get("email", "unknown@example.com")
-        filename = secure_filename(uploaded_file.filename)
+        if not session_id or not email or not goal or not files:
+            return jsonify({"error": "Missing required fields"}), 400
 
-        print(f"📤 Uploading: {filename} for user {email} (type: {file_type})")
-
-        file_metadata = {
-            'name': filename,
-            'parents': [DRIVE_TEMP_FOLDER_ID]
-        }
-
-        media = MediaIoBaseUpload(uploaded_file.stream, mimetype=uploaded_file.mimetype)
-        uploaded = drive_service.files().create(
-            body=file_metadata,
-            media_body=media,
-            fields='id, name, webViewLink'
-        ).execute()
-
-        print(f"✅ File uploaded to Drive: {uploaded['id']}")
+        headers = {"Content-Type": "application/json"}
+        response = requests.post(MAKE_WEBHOOK_START_ASSESSMENT, json=payload, headers=headers)
 
         return jsonify({
-            "file_name": uploaded["name"],
-            "file_id": uploaded["id"],
-            "file_url": uploaded["webViewLink"],
-            "type": file_type,
-            "email": email
-        })
+            "status": "assessment_triggered",
+            "response": response.text
+        }), 200
 
     except Exception as e:
-        print("❌ Upload error:", str(e))
+        print("❌ Error in /start_assessment:", str(e))
         return jsonify({"error": str(e)}), 500
 
 # === GET / ===

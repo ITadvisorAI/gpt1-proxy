@@ -2,24 +2,23 @@ from flask import Flask, request, jsonify
 import requests
 import os
 import time
+
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 
 # === Flask App ===
 app = Flask(__name__)
 
-# === Constants ===
+# === Environment Variables ===
 MAKE_WEBHOOK_START_ANALYSIS = os.getenv(
     "MAKE_WEBHOOK_START_ANALYSIS",
     "https://hook.us2.make.com/1ivi9q9x6l253tikb557hemgtl7n2bv9"
 )
-
 MAKE_WEBHOOK_START_ASSESSMENT = os.getenv(
     "MAKE_WEBHOOK_START_ASSESSMENT",
-    "https://hook.us2.make.com/your_assessment_webhook_here"
+    "https://hook.us2.make.com/placeholder-assessment-endpoint"
 )
-
-DRIVE_ROOT_FOLDER_ID = os.getenv("DRIVE_ROOT_FOLDER_ID")  # Parent folder ID for all sessions
+DRIVE_ROOT_FOLDER_ID = os.getenv("DRIVE_ROOT_FOLDER_ID")
 SERVICE_ACCOUNT_FILE = "/etc/secrets/service_account.json"
 
 # === Google Drive Setup ===
@@ -42,6 +41,9 @@ def start_analysis():
 
         timestamp = time.strftime("%Y%m%d%H%M%S")
         session_id = f"Temp_{timestamp}_{email}"
+        print(f"[DEBUG] Creating session: {session_id}")
+
+        # Create folder in Google Drive
         folder_metadata = {
             'name': session_id,
             'parents': [DRIVE_ROOT_FOLDER_ID],
@@ -53,18 +55,22 @@ def start_analysis():
             fields='id, webViewLink'
         ).execute()
 
-        folder_url = folder['webViewLink']
-        folder_id = folder['id']
+        folder_url = folder.get('webViewLink')
+        folder_id = folder.get('id')
+        print(f"[DEBUG] Folder created: {folder_url}")
 
-        # Optionally: update session tracker via Make.com
+        # Send payload to Make.com webhook
         tracker_payload = {
             "session_id": session_id,
             "email": email,
             "goal": goal,
             "folder_url": folder_url
         }
+
         headers = {"Content-Type": "application/json"}
         response = requests.post(MAKE_WEBHOOK_START_ANALYSIS, json=tracker_payload, headers=headers)
+        response.raise_for_status()
+        print("[DEBUG] Make.com webhook triggered successfully")
 
         return jsonify({
             "session_id": session_id,
@@ -76,12 +82,11 @@ def start_analysis():
         print("❌ Error in /start_analysis:", str(e))
         return jsonify({"error": str(e)}), 500
 
-# === POST /start_assessment ===
+# === POST /start_assessment (for GPT2) ===
 @app.route("/start_assessment", methods=["POST"])
 def start_assessment():
     try:
         payload = request.get_json(force=True)
-
         session_id = payload.get("session_id")
         email = payload.get("email")
         goal = payload.get("goal")
@@ -90,8 +95,10 @@ def start_assessment():
         if not session_id or not email or not goal or not files:
             return jsonify({"error": "Missing required fields"}), 400
 
+        print(f"[DEBUG] Starting assessment for: {session_id} ({email})")
         headers = {"Content-Type": "application/json"}
         response = requests.post(MAKE_WEBHOOK_START_ASSESSMENT, json=payload, headers=headers)
+        response.raise_for_status()
 
         return jsonify({
             "status": "assessment_triggered",
@@ -102,7 +109,7 @@ def start_assessment():
         print("❌ Error in /start_assessment:", str(e))
         return jsonify({"error": str(e)}), 500
 
-# === GET / ===
+# === Health Check ===
 @app.route("/", methods=["GET"])
 def index():
     return "Proxy Server Running", 200

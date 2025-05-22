@@ -28,6 +28,8 @@ def infer_type(name):
     name = name.lower()
     if "asset" in name or "inventory" in name:
         return "asset_inventory"
+    elif "gap" in name or "working" in name:
+        return "gap_working"
     elif "capacity" in name or "scale" in name:
         return "capacity_plan"
     elif "log" in name or "latency" in name:
@@ -40,7 +42,7 @@ def infer_type(name):
         return "backup_schedule"
     elif "strategy" in name or "roadmap" in name:
         return "strategy_input"
-    return "unspecified"
+    return "general"  # ✅ fallback type to avoid blocking flow
 
 # === POST /start_analysis ===
 @app.route("/start_analysis", methods=["POST"])
@@ -71,7 +73,6 @@ def start_analysis():
         folder_url = folder.get('webViewLink')
         print(f"[DEBUG] Folder created: {folder_url}")
 
-        # Store metadata temporarily
         SESSION_STORE[session_id] = {
             "email": email,
             "goal": goal,

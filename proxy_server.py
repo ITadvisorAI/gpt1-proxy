@@ -134,7 +134,7 @@ def list_files():
         print("❌ Error in /list_files:", str(e))
         return jsonify({"error": str(e)}), 500
 
-# === ✅ POST /trigger_assessment ===
+# === POST /trigger_assessment ===
 @app.route("/trigger_assessment", methods=["POST"])
 def trigger_assessment():
     try:

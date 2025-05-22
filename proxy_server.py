@@ -6,11 +6,15 @@ from google.oauth2 import service_account
 from googleapiclient.discovery import build
 
 app = Flask(__name__)
+BASE_DIR = "temp_sessions"
 
 # === Environment Variables ===
-GPT2_ENDPOINT = os.getenv("GPT2_ENDPOINT", "https://it-assessment-api.onrender.com")  # base URL only
+GPT2_ENDPOINT = os.getenv("GPT2_ENDPOINT", "https://it-assessment-api.onrender.com/start_assessment")
 DRIVE_ROOT_FOLDER_ID = os.getenv("DRIVE_ROOT_FOLDER_ID")
 SERVICE_ACCOUNT_FILE = "/etc/secrets/service_account.json"
+
+# === In-Memory Session Store ===
+SESSION_STORE = {}
 
 # === Google Drive Setup ===
 creds = service_account.Credentials.from_service_account_file(
@@ -19,7 +23,7 @@ creds = service_account.Credentials.from_service_account_file(
 )
 drive_service = build('drive', 'v3', credentials=creds)
 
-# === Utility: Infer file type based on name
+# === Infer file type ===
 def infer_type(name):
     name = name.lower()
     if "asset" in name or "inventory" in name:
@@ -53,7 +57,6 @@ def start_analysis():
         session_id = f"Temp_{timestamp}_{email}"
         print(f"[DEBUG] Creating session: {session_id}")
 
-        # Create Google Drive folder for session
         folder_metadata = {
             'name': session_id,
             'parents': [DRIVE_ROOT_FOLDER_ID],
@@ -67,6 +70,14 @@ def start_analysis():
 
         folder_url = folder.get('webViewLink')
         print(f"[DEBUG] Folder created: {folder_url}")
+
+        # Store metadata temporarily
+        SESSION_STORE[session_id] = {
+            "email": email,
+            "goal": goal,
+            "folder_url": folder_url,
+            "files": []
+        }
 
         return jsonify({
             "session_id": session_id,
@@ -91,7 +102,6 @@ def list_files():
 
         print(f"[DEBUG] Listing files for session: {session_id}")
 
-        # Locate the session folder
         folder_query = f"name = '{session_id}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false"
         folders = drive_service.files().list(q=folder_query, fields="files(id, name)").execute().get('files', [])
 
@@ -99,8 +109,6 @@ def list_files():
             return jsonify({"error": f"No folder found for session_id: {session_id}"}), 404
 
         folder_id = folders[0]['id']
-
-        # List files in the session folder
         file_query = f"'{folder_id}' in parents and trashed = false"
         files = drive_service.files().list(q=file_query, fields="files(id, name, mimeType, webViewLink)").execute().get('files', [])
 
@@ -113,6 +121,9 @@ def list_files():
             for f in files
         ]
 
+        if session_id in SESSION_STORE:
+            SESSION_STORE[session_id]["files"] = files_response
+
         return jsonify({
             "session_id": session_id,
             "email": email,
@@ -123,36 +134,44 @@ def list_files():
         print("❌ Error in /list_files:", str(e))
         return jsonify({"error": str(e)}), 500
 
-# === POST /start_assessment ===
-@app.route("/start_assessment", methods=["POST"])
-def start_assessment():
+# === ✅ POST /trigger_assessment ===
+@app.route("/trigger_assessment", methods=["POST"])
+def trigger_assessment():
     try:
         payload = request.get_json(force=True)
         session_id = payload.get("session_id")
-        email = payload.get("email")
-        goal = payload.get("goal")
-        files = payload.get("files")
 
-        if not session_id or not email or not goal or not files:
-            return jsonify({"error": "Missing required fields"}), 400
+        if not session_id or session_id not in SESSION_STORE:
+            return jsonify({"error": "Invalid or unknown session_id"}), 400
 
-        print(f"[DEBUG] Triggering GPT2 Assessment for session: {session_id}")
-        for f in files:
-            print(f"[DEBUG] File: {f['file_name']} | Type: {f.get('type')} | URL: {f['file_url']}")
+        session = SESSION_STORE[session_id]
+        email = session["email"]
+        goal = session["goal"]
+        files = session["files"]
 
-        # Send POST to GPT2 endpoint with /start_assessment path
-        assessment_url = f"{GPT2_ENDPOINT.rstrip('/')}/start_assessment"
+        if not files:
+            return jsonify({"error": "No files found for this session"}), 400
+
+        request_payload = {
+            "session_id": session_id,
+            "email": email,
+            "goal": goal,
+            "files": files,
+            "next_action_webhook": "https://market-gap-analysis.onrender.com/start_market_gap"
+        }
+
+        print(f"🚀 Triggering assessment for {session_id} at {GPT2_ENDPOINT}")
         headers = {"Content-Type": "application/json"}
-        response = requests.post(assessment_url, json=payload, headers=headers)
+        response = requests.post(GPT2_ENDPOINT, json=request_payload, headers=headers)
         response.raise_for_status()
 
         return jsonify({
             "status": "assessment_triggered",
-            "response": response.text
+            "gpt2_response": response.text
         }), 200
 
     except Exception as e:
-        print("❌ Error in /start_assessment:", str(e))
+        print("❌ Error in /trigger_assessment:", str(e))
         return jsonify({"error": str(e)}), 500
 
 # === Health Check ===

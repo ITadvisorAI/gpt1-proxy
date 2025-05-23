@@ -33,7 +33,7 @@ def infer_type(name):
     elif "capacity" in name or "scale" in name:
         return "capacity_plan"
     elif "log" in name or "latency" in name:
-        return "network_logs"
+        return "log"
     elif "compliance" in name:
         return "compliance_report"
     elif "firewall" in name:
@@ -42,7 +42,7 @@ def infer_type(name):
         return "backup_schedule"
     elif "strategy" in name or "roadmap" in name:
         return "strategy_input"
-    return "general"  # ✅ fallback type to avoid blocking flow
+    return "general"
 
 # === POST /start_analysis ===
 @app.route("/start_analysis", methods=["POST"])
@@ -150,8 +150,27 @@ def trigger_assessment():
         goal = session["goal"]
         files = session["files"]
 
+        # 🔁 Dynamic fallback: Pull from Drive if memory has no files
         if not files:
-            return jsonify({"error": "No files found for this session"}), 400
+            print(f"[WARN] No in-memory files for session {session_id}, checking Drive...")
+            folder_query = f"name = '{session_id}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false"
+            folders = drive_service.files().list(q=folder_query, fields="files(id)").execute().get('files', [])
+            if folders:
+                folder_id = folders[0]['id']
+                file_query = f"'{folder_id}' in parents and trashed = false"
+                files_from_drive = drive_service.files().list(q=file_query, fields="files(id, name, webViewLink)").execute().get('files', [])
+                files = [
+                    {
+                        "file_name": f["name"],
+                        "file_url": f["webViewLink"],
+                        "type": infer_type(f["name"])
+                    } for f in files_from_drive
+                ]
+                if not files:
+                    return jsonify({"error": "Still no files found in Drive for this session"}), 400
+                SESSION_STORE[session_id]["files"] = files
+            else:
+                return jsonify({"error": "Session folder not found in Drive"}), 404
 
         request_payload = {
             "session_id": session_id,

@@ -12,7 +12,7 @@ app = Flask(__name__)
 BASE_DIR = "temp_sessions"
 
 # === Environment Variables ===
-GPT2_ENDPOINT = os.getenv("GPT2_ENDPOINT", "https://it-assessment-api.onrender.com/process_assessment")
+GPT2_ENDPOINT = os.getenv("GPT2_ENDPOINT", "https://it-assessment-api.onrender.com/start_assessment")
 DRIVE_ROOT_FOLDER_ID = os.getenv("DRIVE_ROOT_FOLDER_ID")
 SERVICE_ACCOUNT_FILE = "/etc/secrets/service_account.json"
 SESSION_TRACKER_SHEET_ID = "1eSIPIUaQfnoQD7QCyleHyQv1d9Sfy73Z70pnGl8hrYs"

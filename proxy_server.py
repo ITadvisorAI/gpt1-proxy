@@ -2,9 +2,12 @@ from flask import Flask, request, jsonify
 import requests
 import os
 import time
+import json
+import gspread
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 
+# === Flask Setup ===
 app = Flask(__name__)
 BASE_DIR = "temp_sessions"
 
@@ -12,6 +15,7 @@ BASE_DIR = "temp_sessions"
 GPT2_ENDPOINT = os.getenv("GPT2_ENDPOINT", "https://it-assessment-api.onrender.com/start_assessment")
 DRIVE_ROOT_FOLDER_ID = os.getenv("DRIVE_ROOT_FOLDER_ID")
 SERVICE_ACCOUNT_FILE = "/etc/secrets/service_account.json"
+SESSION_TRACKER_SHEET_ID = "1eSIPIUaQfnoQD7QCyleHyQv1d9Sfy73Z70pnGl8hrYs"
 
 # === In-Memory Session Store ===
 SESSION_STORE = {}
@@ -19,9 +23,11 @@ SESSION_STORE = {}
 # === Google Drive Setup ===
 creds = service_account.Credentials.from_service_account_file(
     SERVICE_ACCOUNT_FILE,
-    scopes=["https://www.googleapis.com/auth/drive"]
+    scopes=["https://www.googleapis.com/auth/drive", "https://www.googleapis.com/auth/spreadsheets"]
 )
 drive_service = build('drive', 'v3', credentials=creds)
+gc = gspread.authorize(creds)
+sheet = gc.open_by_key(SESSION_TRACKER_SHEET_ID).sheet1
 
 # === Infer file type ===
 def infer_type(name):
@@ -33,7 +39,7 @@ def infer_type(name):
     elif "capacity" in name or "scale" in name:
         return "capacity_plan"
     elif "log" in name or "latency" in name:
-        return "log"
+        return "network_logs"
     elif "compliance" in name:
         return "compliance_report"
     elif "firewall" in name:
@@ -56,7 +62,7 @@ def start_analysis():
             return jsonify({"error": "Missing required fields: email and goal"}), 400
 
         timestamp = time.strftime("%Y%m%d%H%M%S")
-        session_id = f"Temp_{timestamp}_{email}"
+        session_id = f"Temp_{timestamp}_{email.replace('@', '_').replace('.', '_')}"
         print(f"[DEBUG] Creating session: {session_id}")
 
         folder_metadata = {
@@ -79,6 +85,9 @@ def start_analysis():
             "folder_url": folder_url,
             "files": []
         }
+
+        # Append to Google Sheet
+        sheet.append_row([timestamp, email, session_id, goal, folder_url, "Session Created"])
 
         return jsonify({
             "session_id": session_id,
@@ -150,27 +159,8 @@ def trigger_assessment():
         goal = session["goal"]
         files = session["files"]
 
-        # 🔁 Dynamic fallback: Pull from Drive if memory has no files
         if not files:
-            print(f"[WARN] No in-memory files for session {session_id}, checking Drive...")
-            folder_query = f"name = '{session_id}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false"
-            folders = drive_service.files().list(q=folder_query, fields="files(id)").execute().get('files', [])
-            if folders:
-                folder_id = folders[0]['id']
-                file_query = f"'{folder_id}' in parents and trashed = false"
-                files_from_drive = drive_service.files().list(q=file_query, fields="files(id, name, webViewLink)").execute().get('files', [])
-                files = [
-                    {
-                        "file_name": f["name"],
-                        "file_url": f["webViewLink"],
-                        "type": infer_type(f["name"])
-                    } for f in files_from_drive
-                ]
-                if not files:
-                    return jsonify({"error": "Still no files found in Drive for this session"}), 400
-                SESSION_STORE[session_id]["files"] = files
-            else:
-                return jsonify({"error": "Session folder not found in Drive"}), 404
+            return jsonify({"error": "No files found for this session"}), 400
 
         request_payload = {
             "session_id": session_id,
@@ -184,6 +174,9 @@ def trigger_assessment():
         headers = {"Content-Type": "application/json"}
         response = requests.post(GPT2_ENDPOINT, json=request_payload, headers=headers)
         response.raise_for_status()
+
+        # ✅ Update sheet
+        sheet.append_row([time.strftime("%Y%m%d%H%M%S"), email, session_id, goal, session["folder_url"], "Assessment Triggered"])
 
         return jsonify({
             "status": "assessment_triggered",
@@ -199,7 +192,7 @@ def trigger_assessment():
 def index():
     return "Proxy Server Running", 200
 
-# === MAIN ===
+# === Main Entry Point ===
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)

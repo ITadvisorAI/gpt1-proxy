@@ -145,8 +145,8 @@ def list_files():
         return jsonify({"error": str(e)}), 500
 
 # === POST /trigger_assessment ===
-@app.route("/trigger_assessment", methods=["POST"])
-def trigger_assessment():
+@app.route("/start_assessment", methods=["POST"])
+def start_assessment():
     try:
         payload = request.get_json(force=True)
         session_id = payload.get("session_id")
@@ -179,12 +179,12 @@ def trigger_assessment():
         sheet.append_row([time.strftime("%Y%m%d%H%M%S"), email, session_id, goal, session["folder_url"], "Assessment Triggered"])
 
         return jsonify({
-            "status": "assessment_triggered",
+            "status": "assessment_started",
             "gpt2_response": response.text
         }), 200
 
     except Exception as e:
-        print("❌ Error in /trigger_assessment:", str(e))
+        print("❌ Error in /start_assessment:", str(e))
         return jsonify({"error": str(e)}), 500
 
 # === Health Check ===

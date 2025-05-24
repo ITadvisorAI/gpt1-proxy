@@ -144,7 +144,7 @@ def list_files():
         print("❌ Error in /list_files:", str(e))
         return jsonify({"error": str(e)}), 500
 
-# === POST /trigger_assessment ===
+# === POST /start_assessment ===
 @app.route("/start_assessment", methods=["POST"])
 def start_assessment():
     try:
@@ -170,13 +170,13 @@ def start_assessment():
             "next_action_webhook": "https://market-gap-analysis.onrender.com/start_market_gap"
         }
 
-        print(f"🚀 Triggering assessment for {session_id} at {GPT2_ENDPOINT}")
+        print(f"🚀 Starting assessment for {session_id} at {GPT2_ENDPOINT}")
         headers = {"Content-Type": "application/json"}
         response = requests.post(GPT2_ENDPOINT, json=request_payload, headers=headers)
         response.raise_for_status()
 
         # ✅ Update sheet
-        sheet.append_row([time.strftime("%Y%m%d%H%M%S"), email, session_id, goal, session["folder_url"], "Assessment Triggered"])
+        sheet.append_row([time.strftime("%Y%m%d%H%M%S"), email, session_id, goal, session["folder_url"], "Assessment Started"])
 
         return jsonify({
             "status": "assessment_started",

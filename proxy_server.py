@@ -77,10 +77,16 @@ def list_files():
 @app.route('/start_analysis', methods=['POST'])
 def start_analysis():
     data = request.get_json()
+    print("📩 /start_analysis received:", data)  # Debugging line
+
     session_id = data.get("session_id")
+    if not session_id:
+        return jsonify({"error": "Missing session_id"}), 400
+
     session_folder = os.path.join(TEMP_FOLDER, session_id)
     if not os.path.exists(session_folder):
         return jsonify({"error": "Session folder does not exist"}), 404
+
     print(f"📁 Session folder validated: {session_id}")
     return jsonify({"status": "ready"})
 

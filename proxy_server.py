@@ -1,98 +1,80 @@
-
 import os
 import uuid
-import requests
 from flask import Flask, request, jsonify
 
 app = Flask(__name__)
 
-TEMP_FOLDER = "temp_sessions"
+# Set absolute path for temp_sessions directory
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+TEMP_FOLDER = os.path.join(BASE_DIR, 'temp_sessions')
+os.makedirs(TEMP_FOLDER, exist_ok=True)  # Ensure the temp_sessions folder exists
 
-@app.route("/")
+@app.route('/')
 def index():
-    return "GPT1 Proxy Server is live"
+    return 'GPT1 Proxy Server is live'
 
-@app.route("/start_analysis", methods=["POST"])
+@app.route('/start_analysis', methods=['POST'])
 def start_analysis():
     try:
         data = request.get_json()
         if not data:
             return jsonify({"error": "No JSON payload received"}), 400
 
-        email = data.get("email")
-        goal = data.get("goal")
-        files = data.get("files", [])
-        next_action_webhook = data.get("next_action_webhook")
+        email = data.get('email')
+        goal = data.get('goal')
 
         if not email or not goal:
-            return jsonify({"error": "Missing required fields"}), 400
+            return jsonify({"error": "Missing required fields in request"}), 400
 
-        # Create session ID and folder
-        session_id = f"Temp_{uuid.uuid4().hex[:8]}_{email.replace('@', '_').replace('.', '_')}"
+        # Create session ID
+        safe_email = email.replace('@', '_').replace('.', '_')
+        session_id = f"Temp_{uuid.uuid4().hex[:8]}_{safe_email}"
         session_folder = os.path.join(TEMP_FOLDER, session_id)
+
         os.makedirs(session_folder, exist_ok=True)
+        print(f"📁 Creating session folder at: {session_folder}")
 
-        print(f"📁 Session folder created at: {session_folder}")
-        print(f"📧 Email: {email} | 📂 Files: {len(files)}")
+        # Debug check
+        if os.path.exists(session_folder):
+            print(f"✅ Folder exists: {session_folder}")
+        else:
+            print(f"❌ Failed to create folder: {session_folder}")
 
-        downloaded_files = []
-        for f in files:
-            file_name = f.get("file_name")
-            file_url = f.get("file_url")
-            if not file_name or not file_url:
-                continue
-
-            response = requests.get(file_url)
-            if response.status_code == 200:
-                file_path = os.path.join(session_folder, file_name)
-                with open(file_path, "wb") as out_file:
-                    out_file.write(response.content)
-                downloaded_files.append({"file_name": file_name, "type": f.get("type", "general")})
-                print(f"✅ Downloaded: {file_name}")
-            else:
-                print(f"❌ Failed to download: {file_name}")
-
-        if next_action_webhook:
-            payload = {
-                "session_id": session_id,
-                "email": email,
-                "goal": goal,
-                "files": downloaded_files,
-                "next_action_webhook": next_action_webhook
-            }
-            response = requests.post(next_action_webhook, json=payload)
-            response.raise_for_status()
-            print("🚀 Triggered GPT2 (IT Assessment Module)")
+        # Simulate upload folder URL
+        folder_url = f"https://drive.google.com/folderview?id={session_id}"
 
         return jsonify({
-            "message": "Files received and session initiated.",
-            "session_id": session_id
+            "session_id": session_id,
+            "folder_url": folder_url
         }), 200
 
     except Exception as e:
-        print(f"🔥 Error: {e}")
+        print(f"🔥 Exception in /start_analysis: {e}")
         return jsonify({"error": str(e)}), 500
 
-@app.route("/list_files", methods=["POST"])
+@app.route('/list_files', methods=['POST'])
 def list_files():
     try:
         data = request.get_json()
-        session_id = data.get("session_id")
-        email = data.get("email")
+        session_id = data.get('session_id')
+        email = data.get('email')
 
         if not session_id or not email:
             return jsonify({"error": "Missing session_id or email"}), 400
 
         session_folder = os.path.join(TEMP_FOLDER, session_id)
         if not os.path.exists(session_folder):
-            return jsonify({"files": []})
+            print(f"⚠️ Session folder not found: {session_folder}")
+            return jsonify({"files": []}), 200
 
         files = os.listdir(session_folder)
+        print(f"📂 Listed {len(files)} files in: {session_folder}")
         return jsonify({"files": files}), 200
 
     except Exception as e:
+        print(f"🔥 Exception in /list_files: {e}")
         return jsonify({"error": str(e)}), 500
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)

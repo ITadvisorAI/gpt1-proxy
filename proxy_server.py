@@ -1,106 +1,63 @@
-import os
-import json
-import shutil
-import threading
-import requests
 from flask import Flask, request, jsonify
+import os
+import requests
+import logging
+from threading import Thread
 
 app = Flask(__name__)
+TEMP_FOLDER = "temp_sessions"
+IT_ASSESSMENT_URL = os.getenv("IT_ASSESSMENT_URL", "https://it-assessment.onrender.com/start_assessment")
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-TEMP_FOLDER = os.path.join(BASE_DIR, "temp_sessions")
+logging.basicConfig(level=logging.INFO)
 
-GPT2_ENDPOINT = os.getenv("GPT2_ENDPOINT", "https://it-assessment-api.onrender.com/start_assessment")
-
-@app.route('/')
-def index():
-    return "GPT1 Proxy Server is running"
-
-@app.route('/upload_to_drive', methods=['POST'])
-def upload_to_drive():
-    data = request.get_json()
-    session_id = data.get('session_id')
-    folder_path = os.path.join(TEMP_FOLDER, session_id)
-    os.makedirs(folder_path, exist_ok=True)
-
-    for file in data.get("files", []):
-        file_name = file["file_name"]
-        file_url = file["file_url"]
-        local_path = os.path.join(folder_path, file_name)
-        try:
-            r = requests.get(file_url)
-            r.raise_for_status()
-            with open(local_path, "wb") as f:
-                f.write(r.content)
-            print(f"✅ Downloaded {file_name}")
-        except Exception as e:
-            print(f"❌ Failed to download {file_name}: {e}")
-    
-    return jsonify({"status": "files downloaded"})
-
-@app.route('/list_files', methods=['POST'])
-def list_files():
-    data = request.get_json()
-    session_id = data.get("session_id")
-    folder_path = os.path.join(TEMP_FOLDER, session_id)
-    files = os.listdir(folder_path)
-    classified = []
-
-    for f in files:
-        file_type = "asset_inventory" if "inventory" in f.lower() else "general"
-        classified.append({
-            "file_name": f,
-            "type": file_type,
-            "file_url": f"https://your-storage-domain.com/{session_id}/{f}"  # Placeholder URL
-        })
-
-    print(f"📦 Classified {len(classified)} files in session {session_id}")
-
-    # Automatically trigger assessment after classification
+def trigger_it_assessment(payload):
     try:
-        trigger_payload = {
-            "session_id": session_id,
-            "email": data.get("email"),
-            "goal": data.get("goal"),
-            "files": classified,
-            "next_action_webhook": data.get("next_action_webhook")
-        }
-        headers = {"Content-Type": "application/json"}
-        r = requests.post(GPT2_ENDPOINT, json=trigger_payload, headers=headers)
-        r.raise_for_status()
-        print(f"🚀 Triggered assessment for session {session_id}")
+        logging.info("🚀 Triggering IT Assessment with payload:")
+        logging.info(payload)
+        response = requests.post(IT_ASSESSMENT_URL, json=payload)
+        response.raise_for_status()
+        logging.info("✅ IT Assessment triggered successfully")
     except Exception as e:
-        print(f"❌ Failed to trigger assessment for session {session_id}: {e}")
+        logging.error(f"🔥 Failed to trigger IT Assessment: {e}")
 
-    return jsonify({"status": "files classified", "files": classified})
+@app.route("/", methods=["GET", "HEAD"])
+def health_check():
+    return "Proxy Server is running", 200
 
-@app.route('/start_analysis', methods=['POST'])
+@app.route("/start_analysis", methods=["POST"])
 def start_analysis():
-    data = request.get_json()
-    print("📩 /start_analysis received:", data)  # Debugging line
-
-    session_id = data.get("session_id")
-    if not session_id:
-        return jsonify({"error": "Missing session_id"}), 400
-
-    session_folder = os.path.join(TEMP_FOLDER, session_id)
-    if not os.path.exists(session_folder):
-        return jsonify({"error": "Session folder does not exist"}), 404
-
-    print(f"📁 Session folder validated: {session_id}")
-    return jsonify({"status": "ready"})
-
-@app.route('/delete_session', methods=['POST'])
-def delete_session():
-    data = request.get_json()
-    session_id = data.get("session_id")
-    session_folder = os.path.join(TEMP_FOLDER, session_id)
     try:
-        shutil.rmtree(session_folder)
-        print(f"🗑️ Deleted session folder: {session_id}")
-        return jsonify({"status": "session deleted"})
+        data = request.get_json(force=True)
+        session_id = data.get("session_id")
+        email = data.get("email")
+        files = data.get("files")
+        next_action_webhook = data.get("next_action_webhook", "")
+
+        if not session_id or not email or not files:
+            logging.error("❌ Missing required fields in request")
+            return jsonify({"error": "Missing session_id, email, or files"}), 400
+
+        session_folder = os.path.join(TEMP_FOLDER, session_id)
+        os.makedirs(session_folder, exist_ok=True)
+        logging.info(f"📁 Created session folder: {session_folder}")
+
+        # Save metadata for debugging
+        with open(os.path.join(session_folder, "metadata.json"), "w") as f:
+            import json
+            json.dump(data, f, indent=2)
+
+        logging.info("📧 Email: %s | 📂 Files: %d", email, len(files))
+
+        # Trigger assessment in background
+        thread = Thread(target=trigger_it_assessment, args=(data,))
+        thread.start()
+
+        return jsonify({"status": "Trigger sent"}), 200
+
     except Exception as e:
+        logging.error(f"🔥 Error in /start_analysis: {e}")
         return jsonify({"error": str(e)}), 500
 
 if __name__ == "__main__":
-    app.run(host='0.0.0.0', port=int(os.environ.get("PORT", 10000)))
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host="0.0.0.0", port=port)

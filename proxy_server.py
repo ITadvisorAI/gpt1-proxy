@@ -1,3 +1,4 @@
+print("🔥 THIS IS THE DEPLOYED PROXY SERVER FILE")
 from flask import Flask, request, jsonify
 import requests
 import os

@@ -148,31 +148,39 @@ def user_message():
         session_id = data.get("session_id")
         message = data.get("message", "").lower()
 
-        print(f"[DEBUG] /user_message triggered: session_id={session_id}, message={message}")
+        print(f"[DEBUG] user_message called with session_id={session_id}, message={message}")
 
         if "upload" in message and ("done" in message or "uploaded" in message):
             session = SESSION_STORE.get(session_id)
             if not session:
-                print("❌ No session found for:", session_id)
+                print("❌ No session found in SESSION_STORE for:", session_id)
                 return jsonify({"error": "Session not found"}), 404
 
-            print("⚙️ Triggering IT Assessment at:", GPT2_ENDPOINT)
-            print(f"📦 Payload: {json.dumps(session, indent=2)}")
-
-            response = requests.post(GPT2_ENDPOINT, json={
+            payload = {
                 "session_id": session_id,
                 "email": session["email"],
                 "goal": session["goal"],
                 "files": session["files"],
                 "next_action_webhook": "https://market-gap-analysis.onrender.com/start_market_gap"
-            })
+            }
 
-            print(f"✅ GPT2 responded with status: {response.status_code}")
-            print(response.text)
+            print("🚀 Triggering GPT2 at:", GPT2_ENDPOINT)
+            print("📦 Payload:", json.dumps(payload, indent=2))
 
-            sheet.append_row([time.strftime("%Y%m%d%H%M%S"), session["email"],
-                              session_id, session["goal"], session["folder_url"], "Assessment Triggered"])
-            return jsonify({"status": "triggered", "response": response.text}), 200
+            try:
+                response = requests.post(GPT2_ENDPOINT, json=payload, headers={"Content-Type": "application/json"})
+                print("✅ GPT2 responded:", response.status_code)
+                print(response.text)
+                response.raise_for_status()
+
+                sheet.append_row([time.strftime("%Y%m%d%H%M%S"), session["email"],
+                                  session_id, session["goal"], session["folder_url"], "Assessment Triggered"])
+
+                return jsonify({"status": "triggered", "response": response.text}), 200
+
+            except Exception as post_error:
+                print("❌ ERROR during GPT2 trigger:", str(post_error))
+                return jsonify({"error": f"Failed to contact GPT2: {str(post_error)}"}), 502
 
         return jsonify({"status": "waiting_for_more_input"}), 200
 

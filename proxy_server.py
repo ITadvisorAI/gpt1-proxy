@@ -148,24 +148,36 @@ def user_message():
         session_id = data.get("session_id")
         message = data.get("message", "").lower()
 
+        print(f"[DEBUG] /user_message triggered: session_id={session_id}, message={message}")
+
         if "upload" in message and ("done" in message or "uploaded" in message):
-            print("⚙️ Triggering IT Assessment POST now...")
+            session = SESSION_STORE.get(session_id)
+            if not session:
+                print("❌ No session found for:", session_id)
+                return jsonify({"error": "Session not found"}), 404
+
+            print("⚙️ Triggering IT Assessment at:", GPT2_ENDPOINT)
+            print(f"📦 Payload: {json.dumps(session, indent=2)}")
+
             response = requests.post(GPT2_ENDPOINT, json={
                 "session_id": session_id,
-                "email": SESSION_STORE[session_id]["email"],
-                "goal": SESSION_STORE[session_id]["goal"],
-                "files": SESSION_STORE[session_id]["files"],
+                "email": session["email"],
+                "goal": session["goal"],
+                "files": session["files"],
                 "next_action_webhook": "https://market-gap-analysis.onrender.com/start_market_gap"
             })
-            response.raise_for_status()
-            sheet.append_row([time.strftime("%Y%m%d%H%M%S"), SESSION_STORE[session_id]["email"],
-                              session_id, SESSION_STORE[session_id]["goal"],
-                              SESSION_STORE[session_id]["folder_url"], "Assessment Triggered"])
+
+            print(f"✅ GPT2 responded with status: {response.status_code}")
+            print(response.text)
+
+            sheet.append_row([time.strftime("%Y%m%d%H%M%S"), session["email"],
+                              session_id, session["goal"], session["folder_url"], "Assessment Triggered"])
             return jsonify({"status": "triggered", "response": response.text}), 200
 
         return jsonify({"status": "waiting_for_more_input"}), 200
+
     except Exception as e:
-        print("❌ Error in /user_message:", str(e))
+        print("❌ Exception in /user_message:", str(e))
         return jsonify({"error": str(e)}), 500
 
 @app.route("/", methods=["GET"])

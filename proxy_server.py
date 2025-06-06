@@ -1,3 +1,4 @@
+
 from flask import Flask, request, jsonify
 import requests
 import os
@@ -12,7 +13,7 @@ app = Flask(__name__)
 BASE_DIR = "temp_sessions"
 
 # === Environment Variables ===
-GPT2_ENDPOINT = os.getenv("GPT2_ENDPOINT", "https://it-assessment-api.onrender.com/start_assessment")
+GPT2_ENDPOINT = os.getenv("GPT2_ENDPOINT", "http://localhost:5000/start_assessment")
 DRIVE_ROOT_FOLDER_ID = os.getenv("DRIVE_ROOT_FOLDER_ID")
 SERVICE_ACCOUNT_FILE = "/etc/secrets/service_account.json"
 SESSION_TRACKER_SHEET_ID = "1eSIPIUaQfnoQD7QCyleHyQv1d9Sfy73Z70pnGl8hrYs"
@@ -29,7 +30,6 @@ drive_service = build('drive', 'v3', credentials=creds)
 gc = gspread.authorize(creds)
 sheet = gc.open_by_key(SESSION_TRACKER_SHEET_ID).sheet1
 
-# === Infer file type ===
 def infer_type(name):
     name = name.lower()
     if "asset" in name or "inventory" in name:
@@ -50,7 +50,6 @@ def infer_type(name):
         return "strategy_input"
     return "general"
 
-# === POST /start_analysis ===
 @app.route("/start_analysis", methods=["POST"])
 def start_analysis():
     try:
@@ -86,7 +85,6 @@ def start_analysis():
             "files": []
         }
 
-        # Append to Google Sheet
         sheet.append_row([timestamp, email, session_id, goal, folder_url, "Session Created"])
 
         return jsonify({
@@ -99,7 +97,6 @@ def start_analysis():
         print("❌ Error in /start_analysis:", str(e))
         return jsonify({"error": str(e)}), 500
 
-# === POST /list_files ===
 @app.route("/list_files", methods=["POST"])
 def list_files():
     try:
@@ -144,55 +141,37 @@ def list_files():
         print("❌ Error in /list_files:", str(e))
         return jsonify({"error": str(e)}), 500
 
-# === POST /start_assessment ===
-@app.route("/start_assessment", methods=["POST"])
-def start_assessment():
+@app.route("/user_message", methods=["POST"])
+def user_message():
     try:
-        payload = request.get_json(force=True)
-        session_id = payload.get("session_id")
+        data = request.get_json(force=True)
+        session_id = data.get("session_id")
+        message = data.get("message", "").lower()
 
-        if not session_id or session_id not in SESSION_STORE:
-            return jsonify({"error": "Invalid or unknown session_id"}), 400
+        if "upload" in message and ("done" in message or "uploaded" in message):
+            print("⚙️ Triggering IT Assessment POST now...")
+            response = requests.post(GPT2_ENDPOINT, json={
+                "session_id": session_id,
+                "email": SESSION_STORE[session_id]["email"],
+                "goal": SESSION_STORE[session_id]["goal"],
+                "files": SESSION_STORE[session_id]["files"],
+                "next_action_webhook": "https://market-gap-analysis.onrender.com/start_market_gap"
+            })
+            response.raise_for_status()
+            sheet.append_row([time.strftime("%Y%m%d%H%M%S"), SESSION_STORE[session_id]["email"],
+                              session_id, SESSION_STORE[session_id]["goal"],
+                              SESSION_STORE[session_id]["folder_url"], "Assessment Triggered"])
+            return jsonify({"status": "triggered", "response": response.text}), 200
 
-        session = SESSION_STORE[session_id]
-        email = session["email"]
-        goal = session["goal"]
-        files = session["files"]
-
-        if not files:
-            return jsonify({"error": "No files found for this session"}), 400
-
-        request_payload = {
-            "session_id": session_id,
-            "email": email,
-            "goal": goal,
-            "files": files,
-            "next_action_webhook": "https://market-gap-analysis.onrender.com/start_market_gap"
-        }
-
-        print(f"🚀 Starting assessment for {session_id} at {GPT2_ENDPOINT}")
-        headers = {"Content-Type": "application/json"}
-        response = requests.post(GPT2_ENDPOINT, json=request_payload, headers=headers)
-        response.raise_for_status()
-
-        # ✅ Update sheet
-        sheet.append_row([time.strftime("%Y%m%d%H%M%S"), email, session_id, goal, session["folder_url"], "Assessment Started"])
-
-        return jsonify({
-            "status": "assessment_started",
-            "gpt2_response": response.text
-        }), 200
-
+        return jsonify({"status": "waiting_for_more_input"}), 200
     except Exception as e:
-        print("❌ Error in /start_assessment:", str(e))
+        print("❌ Error in /user_message:", str(e))
         return jsonify({"error": str(e)}), 500
 
-# === Health Check ===
 @app.route("/", methods=["GET"])
 def index():
     return "Proxy Server Running", 200
 
-# === Main Entry Point ===
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 5000))
+    port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)

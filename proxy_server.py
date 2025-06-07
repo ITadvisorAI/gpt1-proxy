@@ -143,20 +143,22 @@ def list_files():
 
 @app.route("/user_message", methods=["POST"])
 def user_message():
+    print("🟢 HIT: /user_message endpoint")
     try:
         data = request.get_json(force=True)
+        print(f"📦 Payload: {data}")
+
         session_id = data.get("session_id")
         message = data.get("message", "").lower()
-
-        print(f"📩 /user_message called for session: {session_id}")
-        print(f"🗣 Message received: {message}")
+        print(f"📩 session_id = {session_id}, message = {message}")
 
         if not session_id or session_id not in SESSION_STORE:
             print(f"❌ Invalid or missing session_id: {session_id}")
             return jsonify({"error": "Invalid session_id"}), 400
 
         if "upload" in message and ("done" in message or "uploaded" in message):
-            print(f"⚙️ Triggering GPT2 at {GPT2_ENDPOINT}...")
+            print(f"⚙️ Attempting to contact GPT2 at {GPT2_ENDPOINT}...")
+
             payload = {
                 "session_id": session_id,
                 "email": SESSION_STORE[session_id]["email"],
@@ -164,21 +166,22 @@ def user_message():
                 "files": SESSION_STORE[session_id]["files"],
                 "next_action_webhook": "https://market-gap-analysis.onrender.com/start_market_gap"
             }
-            print(f"📦 Payload: {json.dumps(payload, indent=2)}")
 
-            try:
-                response = requests.post(GPT2_ENDPOINT, json=payload)
-                print(f"✅ GPT2 responded: {response.status_code} - {response.text}")
-            except Exception as post_err:
-                print(f"❌ Error posting to GPT2: {post_err}")
-                return jsonify({"error": "Failed to contact GPT2"}), 500
+            print(f"📤 Payload to GPT2:
+{json.dumps(payload, indent=2)}")
+
+            response = requests.post(GPT2_ENDPOINT, json=payload)
+            print(f"✅ GPT2 responded with {response.status_code}: {response.text}")
 
             sheet.append_row([time.strftime("%Y%m%d%H%M%S"), SESSION_STORE[session_id]["email"],
                               session_id, SESSION_STORE[session_id]["goal"],
                               SESSION_STORE[session_id]["folder_url"], "Assessment Triggered"])
-            return jsonify({"status": "triggered", "response": response.text}), 200
 
+            return jsonify({"status": "triggered"}), 200
+
+        print("🟡 No trigger condition met.")
         return jsonify({"status": "waiting_for_more_input"}), 200
+
     except Exception as e:
         print("❌ Error in /user_message:", str(e))
         return jsonify({"error": str(e)}), 500

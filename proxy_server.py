@@ -72,7 +72,9 @@ def user_message():
             "next_action_webhook": ""
         }
 
-        response = requests.post("http://localhost:5000/start_assessment", json=payload)
+        gpt2_url = "https://it-assessment-api.onrender.com/start_assessment"
+        print(f"🚀 Triggering IT Assessment at: {gpt2_url}")
+        response = requests.post(gpt2_url, json=payload)
         return jsonify({"status": "triggered", "assessment_response": response.text}), 200
 
     return jsonify({"status": "waiting_for_more_input"}), 200

@@ -1,4 +1,3 @@
-
 from flask import Flask, request, jsonify
 import requests
 import os
@@ -152,13 +151,12 @@ def user_message():
         message = data.get("message", "").lower()
         print(f"📩 session_id = {session_id}, message = {message}")
 
-        if not session_id or session_id not in SESSION_STORE:
-            print(f"❌ Invalid or missing session_id: {session_id}")
+        if session_id not in SESSION_STORE:
+            print(f"❌ session_id {session_id} not in SESSION_STORE")
             return jsonify({"error": "Invalid session_id"}), 400
 
         if "upload" in message and ("done" in message or "uploaded" in message):
-            print(f"⚙️ Attempting to contact GPT2 at {GPT2_ENDPOINT}...")
-
+            print("⚙️ Trigger condition met. Preparing GPT2 payload...")
             payload = {
                 "session_id": session_id,
                 "email": SESSION_STORE[session_id]["email"],
@@ -166,23 +164,23 @@ def user_message():
                 "files": SESSION_STORE[session_id]["files"],
                 "next_action_webhook": "https://market-gap-analysis.onrender.com/start_market_gap"
             }
+            print("📤 Payload to GPT2:")
+            print(json.dumps(payload, indent=2))
+            try:
+                response = requests.post(GPT2_ENDPOINT, json=payload)
+                print(f"✅ GPT2 responded: {response.status_code} – {response.text}")
+                sheet.append_row([time.strftime("%Y%m%d%H%M%S"), SESSION_STORE[session_id]["email"],
+                                  session_id, SESSION_STORE[session_id]["goal"],
+                                  SESSION_STORE[session_id]["folder_url"], "Assessment Triggered"])
+                return jsonify({"status": "triggered"}), 200
+            except Exception as post_error:
+                print(f"❌ Error during GPT2 trigger: {post_error}")
+                return jsonify({"error": str(post_error)}), 500
 
-            print("📤 Payload to GPT2:\n" + json.dumps(payload, indent=2))
-
-            response = requests.post(GPT2_ENDPOINT, json=payload)
-            print(f"✅ GPT2 responded with {response.status_code}: {response.text}")
-
-            sheet.append_row([time.strftime("%Y%m%d%H%M%S"), SESSION_STORE[session_id]["email"],
-                              session_id, SESSION_STORE[session_id]["goal"],
-                              SESSION_STORE[session_id]["folder_url"], "Assessment Triggered"])
-
-            return jsonify({"status": "triggered"}), 200
-
-        print("🟡 No trigger condition met.")
+        print("🟡 No matching trigger phrase in message.")
         return jsonify({"status": "waiting_for_more_input"}), 200
-
     except Exception as e:
-        print("❌ Error in /user_message:", str(e))
+        print(f"❌ Exception in /user_message: {e}")
         return jsonify({"error": str(e)}), 500
 
 @app.route("/", methods=["GET"])

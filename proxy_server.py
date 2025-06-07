@@ -167,8 +167,7 @@ def user_message():
                 "next_action_webhook": "https://market-gap-analysis.onrender.com/start_market_gap"
             }
 
-            print(f"📤 Payload to GPT2:
-{json.dumps(payload, indent=2)}")
+            print("📤 Payload to GPT2:\n" + json.dumps(payload, indent=2))
 
             response = requests.post(GPT2_ENDPOINT, json=payload)
             print(f"✅ GPT2 responded with {response.status_code}: {response.text}")

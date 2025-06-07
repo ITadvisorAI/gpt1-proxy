@@ -155,48 +155,43 @@ def user_message():
             return jsonify({"error": "Invalid session_id"}), 400
 
         print(f"🧾 Files in SESSION_STORE = {SESSION_STORE[session_id].get('files')}")
-
-        # Trigger only if file list is present
         print(f"[DEBUG] Raw message: {repr(message)}")
-print(f"[DEBUG] Files in session: {SESSION_STORE[session_id].get('files')}")
+        print(f"[DEBUG] Files in session: {SESSION_STORE[session_id].get('files')}")
 
-if (
-    ("upload" in message and ("done" in message or "uploaded" in message)) or
-    (message.startswith("yes") and SESSION_STORE[session_id].get("files"))
-):
-    print("⚙️ Trigger condition met. Preparing GPT2 payload...")
+        if (
+            ("upload" in message and ("done" in message or "uploaded" in message)) or
+            (message.startswith("yes") and SESSION_STORE[session_id].get("files"))
+        ):
+            print("⚙️ Trigger condition met. Preparing GPT2 payload...")
 
-    if not SESSION_STORE[session_id].get("files"):
-        print("🛑 Files are empty at trigger time!")
-        return jsonify({"error": "Files missing. Please call /list_files first."}), 400
+            if not SESSION_STORE[session_id].get("files"):
+                print("🛑 Files are empty at trigger time!")
+                return jsonify({"error": "Files missing. Please call /list_files first."}), 400
 
-    payload = {
-        "session_id": session_id,
-        "email": SESSION_STORE[session_id]["email"],
-        "goal": SESSION_STORE[session_id]["goal"],
-        "files": SESSION_STORE[session_id]["files"],
-        "next_action_webhook": "https://market-gap-analysis.onrender.com/start_market_gap"
-    }
+            payload = {
+                "session_id": session_id,
+                "email": SESSION_STORE[session_id]["email"],
+                "goal": SESSION_STORE[session_id]["goal"],
+                "files": SESSION_STORE[session_id]["files"],
+                "next_action_webhook": "https://market-gap-analysis.onrender.com/start_market_gap"
+            }
 
-    print("📤 Payload to GPT2:")
-    print(json.dumps(payload, indent=2))
+            print("📤 Payload to GPT2:")
+            print(json.dumps(payload, indent=2))
 
-    try:
-        response = requests.post(GPT2_ENDPOINT, json=payload)
-        print(f"✅ GPT2 responded: {response.status_code}")
-        print(f"🔁 GPT2 response body: {response.text}")
-        sheet.append_row([time.strftime("%Y%m%d%H%M%S"), SESSION_STORE[session_id]["email"],
-                          session_id, SESSION_STORE[session_id]["goal"],
-                          SESSION_STORE[session_id]["folder_url"], "Assessment Triggered"])
-        return jsonify({"status": "triggered"}), 200
-    except Exception as post_error:
-        print(f"❌ Error during GPT2 trigger: {post_error}")
-        return jsonify({"error": str(post_error)}), 500
+            try:
+                response = requests.post(GPT2_ENDPOINT, json=payload)
+                print(f"✅ GPT2 responded: {response.status_code}")
+                print(f"🔁 GPT2 response body: {response.text}")
+                sheet.append_row([time.strftime("%Y%m%d%H%M%S"), SESSION_STORE[session_id]["email"],
+                                  session_id, SESSION_STORE[session_id]["goal"],
+                                  SESSION_STORE[session_id]["folder_url"], "Assessment Triggered"])
+                return jsonify({"status": "triggered"}), 200
+            except Exception as post_error:
+                print(f"❌ Error during GPT2 trigger: {post_error}")
+                return jsonify({"error": str(post_error)}), 500
 
-print("🟡 No matching trigger phrase in message or no files found.")
-return jsonify({"status": "waiting_for_more_input"}), 200
-
-        print("🟡 No matching trigger phrase in message.")
+        print("🟡 No matching trigger phrase in message or no files found.")
         return jsonify({"status": "waiting_for_more_input"}), 200
 
     except Exception as e:

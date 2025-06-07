@@ -7,20 +7,17 @@ import gspread
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 
-# === Flask Setup ===
 app = Flask(__name__)
 BASE_DIR = "temp_sessions"
 
-# === Environment Variables ===
 GPT2_ENDPOINT = os.getenv("GPT2_ENDPOINT", "https://it-assessment-api.onrender.com/start_assessment")
 DRIVE_ROOT_FOLDER_ID = os.getenv("DRIVE_ROOT_FOLDER_ID")
 SERVICE_ACCOUNT_FILE = "/etc/secrets/service_account.json"
 SESSION_TRACKER_SHEET_ID = "1eSIPIUaQfnoQD7QCyleHyQv1d9Sfy73Z70pnGl8hrYs"
 
-# === In-Memory Session Store ===
 SESSION_STORE = {}
 
-# === Google Drive Setup ===
+# Google Drive & Sheets setup
 creds = service_account.Credentials.from_service_account_file(
     SERVICE_ACCOUNT_FILE,
     scopes=["https://www.googleapis.com/auth/drive", "https://www.googleapis.com/auth/spreadsheets"]
@@ -157,10 +154,9 @@ def user_message():
             print(f"❌ session_id {session_id} not in SESSION_STORE")
             return jsonify({"error": "Invalid session_id"}), 400
 
-        # 🔍 Debug trigger readiness
-        print(f"🧪 message = {message}")
         print(f"🧾 Files in SESSION_STORE = {SESSION_STORE[session_id].get('files')}")
 
+        # Trigger only if file list is present
         if (
             ("upload" in message and ("done" in message or "uploaded" in message)) or
             (message.startswith("yes") and SESSION_STORE[session_id].get("files"))
@@ -196,12 +192,6 @@ def user_message():
         print("🟡 No matching trigger phrase in message.")
         return jsonify({"status": "waiting_for_more_input"}), 200
 
-    except Exception as e:
-        print(f"❌ Exception in /user_message: {e}")
-        return jsonify({"error": str(e)}), 500
-
-        print("🟡 No matching trigger phrase in message.")
-        return jsonify({"status": "waiting_for_more_input"}), 200
     except Exception as e:
         print(f"❌ Exception in /user_message: {e}")
         return jsonify({"error": str(e)}), 500

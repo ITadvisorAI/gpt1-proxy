@@ -168,7 +168,8 @@ def user_message():
             print(json.dumps(payload, indent=2))
             try:
                 response = requests.post(GPT2_ENDPOINT, json=payload)
-                print(f"✅ GPT2 responded: {response.status_code} – {response.text}")
+                print(f"✅ GPT2 responded: {response.status_code}")
+                print(f"🔁 GPT2 response body: {response.text}")
                 sheet.append_row([time.strftime("%Y%m%d%H%M%S"), SESSION_STORE[session_id]["email"],
                                   session_id, SESSION_STORE[session_id]["goal"],
                                   SESSION_STORE[session_id]["folder_url"], "Assessment Triggered"])

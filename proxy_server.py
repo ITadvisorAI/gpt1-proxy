@@ -150,18 +150,23 @@ def user_message():
         print(f"📦 Payload: {data}")
 
         session_id = data.get("session_id")
-        message = data.get("message", "").lower()
+        message = data.get("message", "").lower().strip()
         print(f"📩 session_id = {session_id}, message = {message}")
 
         if session_id not in SESSION_STORE:
             print(f"❌ session_id {session_id} not in SESSION_STORE")
             return jsonify({"error": "Invalid session_id"}), 400
 
-        # ✅ Trigger check
-        if "upload" in message and ("done" in message or "uploaded" in message):
+        # 🔍 Debug trigger readiness
+        print(f"🧪 message = {message}")
+        print(f"🧾 Files in SESSION_STORE = {SESSION_STORE[session_id].get('files')}")
+
+        if (
+            ("upload" in message and ("done" in message or "uploaded" in message)) or
+            (message.startswith("yes") and SESSION_STORE[session_id].get("files"))
+        ):
             print("⚙️ Trigger condition met. Preparing GPT2 payload...")
 
-            # ✅ SAFETY CHECK: Ensure file list is not empty
             if not SESSION_STORE[session_id].get("files"):
                 print("⚠️ No files found in session. Call /list_files first.")
                 return jsonify({"error": "Files missing. Please call /list_files first."}), 400
@@ -175,6 +180,7 @@ def user_message():
             }
             print("📤 Payload to GPT2:")
             print(json.dumps(payload, indent=2))
+
             try:
                 response = requests.post(GPT2_ENDPOINT, json=payload)
                 print(f"✅ GPT2 responded: {response.status_code}")
@@ -186,6 +192,13 @@ def user_message():
             except Exception as post_error:
                 print(f"❌ Error during GPT2 trigger: {post_error}")
                 return jsonify({"error": str(post_error)}), 500
+
+        print("🟡 No matching trigger phrase in message.")
+        return jsonify({"status": "waiting_for_more_input"}), 200
+
+    except Exception as e:
+        print(f"❌ Exception in /user_message: {e}")
+        return jsonify({"error": str(e)}), 500
 
         print("🟡 No matching trigger phrase in message.")
         return jsonify({"status": "waiting_for_more_input"}), 200

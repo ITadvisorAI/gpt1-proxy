@@ -129,6 +129,8 @@ def list_files():
 
         if session_id in SESSION_STORE:
             SESSION_STORE[session_id]["files"] = files_response
+            print(f"✅ Stored files for session {session_id}:")
+            print(json.dumps(SESSION_STORE[session_id]["files"], indent=2))
 
         return jsonify({
             "session_id": session_id,
@@ -155,8 +157,15 @@ def user_message():
             print(f"❌ session_id {session_id} not in SESSION_STORE")
             return jsonify({"error": "Invalid session_id"}), 400
 
+        # ✅ Trigger check
         if "upload" in message and ("done" in message or "uploaded" in message):
             print("⚙️ Trigger condition met. Preparing GPT2 payload...")
+
+            # ✅ SAFETY CHECK: Ensure file list is not empty
+            if not SESSION_STORE[session_id].get("files"):
+                print("⚠️ No files found in session. Call /list_files first.")
+                return jsonify({"error": "Files missing. Please call /list_files first."}), 400
+
             payload = {
                 "session_id": session_id,
                 "email": SESSION_STORE[session_id]["email"],

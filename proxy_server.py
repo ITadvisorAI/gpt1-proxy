@@ -1,4 +1,3 @@
-
 from flask import Flask, request, jsonify
 import requests
 import os
@@ -17,10 +16,9 @@ SESSION_TRACKER_SHEET_ID = "1eSIPIUaQfnoQD7QCyleHyQv1d9Sfy73Z70pnGl8hrYs"
 
 SESSION_STORE = {}
 
-# Google Drive & Sheets setup
 creds = service_account.Credentials.from_service_account_file(
     SERVICE_ACCOUNT_FILE,
-    scopes=["https://www.googleapis.com/auth/drive", "https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive.file"]
+    scopes=["https://www.googleapis.com/auth/drive", "https://www.googleapis.com/auth/spreadsheets"]
 )
 drive_service = build('drive', 'v3', credentials=creds)
 gc = gspread.authorize(creds)
@@ -71,15 +69,6 @@ def start_analysis():
             fields='id, webViewLink'
         ).execute()
 
-        # Make folder publicly readable
-        drive_service.permissions().create(
-            fileId=folder["id"],
-            body={
-                'type': 'anyone',
-                'role': 'reader'
-            }
-        ).execute()
-
         folder_url = folder.get('webViewLink')
 
         SESSION_STORE[session_id] = {
@@ -119,12 +108,12 @@ def list_files():
 
         folder_id = folders[0]['id']
         file_query = f"'{folder_id}' in parents and trashed = false"
-        files = drive_service.files().list(q=file_query, fields="files(id, name, mimeType)").execute().get('files', [])
+        files = drive_service.files().list(q=file_query, fields="files(id, name, mimeType, webViewLink)").execute().get('files', [])
 
         files_response = [
             {
                 "file_name": f["name"],
-                "file_url": f"https://drive.google.com/uc?export=download&id={f['id']}",
+                "file_url": f["webViewLink"],
                 "type": infer_type(f["name"])
             }
             for f in files
@@ -142,3 +131,49 @@ def list_files():
     except Exception as e:
         print("❌ Error in /list_files:", str(e))
         return jsonify({"error": str(e)}), 500
+
+@app.route("/user_message", methods=["POST"])
+def user_message():
+    try:
+        data = request.get_json(force=True)
+        session_id = data.get("session_id")
+        message = data.get("message", "").lower().strip()
+
+        if session_id not in SESSION_STORE:
+            return jsonify({"error": "Invalid session_id"}), 400
+
+        if (
+            ("upload" in message and ("done" in message or "uploaded" in message)) or
+            (message.startswith("yes") and SESSION_STORE[session_id].get("files"))
+        ):
+            payload = {
+                "session_id": session_id,
+                "email": SESSION_STORE[session_id]["email"],
+                "goal": SESSION_STORE[session_id]["goal"],
+                "files": SESSION_STORE[session_id]["files"],
+                "next_action_webhook": "https://market-gap-analysis.onrender.com/start_market_gap"
+            }
+
+            try:
+                response = requests.post(GPT2_ENDPOINT, json=payload)
+                sheet.append_row([time.strftime("%Y%m%d%H%M%S"), SESSION_STORE[session_id]["email"],
+                                  session_id, SESSION_STORE[session_id]["goal"],
+                                  SESSION_STORE[session_id]["folder_url"], "Assessment Triggered"])
+                return jsonify({"status": "triggered"}), 200
+            except Exception as post_error:
+                return jsonify({"error": str(post_error)}), 500
+
+        return jsonify({"status": "waiting_for_more_input"}), 200
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/", methods=["GET"])
+def index():
+    return "Proxy Server Running", 200
+
+# ✅ ENSURE THIS RUNS IN RENDER ENVIRONMENT
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 10000))
+    print(f"[INFO] Starting server on port {port}")
+    app.run(host="0.0.0.0", port=port)

@@ -113,6 +113,17 @@ def list_files():
         file_query = f"'{folder_id}' in parents and trashed = false"
         files = drive_service.files().list(q=file_query, fields="files(id, name, mimeType, webViewLink)").execute().get('files', [])
 
+        # 🔓 Make each file publicly viewable
+        for f in files:
+            try:
+                drive_service.permissions().create(
+                    fileId=f["id"],
+                    body={"role": "reader", "type": "anyone"},
+                    fields="id"
+                ).execute()
+            except Exception as share_error:
+                print(f"⚠️ Could not make file public: {f['name']} – {share_error}")
+
         files_response = [
             {
                 "file_name": f["name"],
@@ -155,7 +166,7 @@ def user_message():
                 "session_id": session_id,
                 "email": SESSION_STORE[session_id]["email"],
                 "goal": SESSION_STORE[session_id]["goal"],
-                "files": SESSION_STORE[session_id]["files"]                
+                "files": SESSION_STORE[session_id]["files"]
             }
 
             print(f"[DEBUG] Triggering GPT2 with payload: {json.dumps(payload)[:300]}...")

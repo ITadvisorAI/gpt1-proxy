@@ -1,4 +1,3 @@
-
 from flask import Flask, request, jsonify
 import requests
 import os
@@ -9,7 +8,6 @@ from google.oauth2 import service_account
 from googleapiclient.discovery import build
 
 app = Flask(__name__)
-BASE_DIR = "temp_sessions"
 
 GPT2_ENDPOINT = os.getenv("GPT2_ENDPOINT", "https://it-assessment-api.onrender.com/start_assessment")
 DRIVE_ROOT_FOLDER_ID = os.getenv("DRIVE_ROOT_FOLDER_ID")
@@ -55,7 +53,7 @@ def start_analysis():
         goal = payload.get("goal")
 
         if not email or not goal:
-            return jsonify({"error": "Missing required fields: email and goal"}), 400
+            return jsonify({"error": "Missing required fields"}), 400
 
         timestamp = time.strftime("%Y%m%d%H%M%S")
         session_id = f"Temp_{timestamp}_{email.replace('@', '_').replace('.', '_')}"
@@ -73,7 +71,6 @@ def start_analysis():
         ).execute()
 
         folder_url = folder.get('webViewLink')
-        print(f"[DEBUG] Folder created: {folder_url}")
 
         SESSION_STORE[session_id] = {
             "email": email,
@@ -104,8 +101,6 @@ def list_files():
         if not session_id or not email:
             return jsonify({"error": "Missing session_id or email"}), 400
 
-        print(f"[DEBUG] Listing files for session: {session_id}")
-
         folder_query = f"name = '{session_id}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false"
         folders = drive_service.files().list(q=folder_query, fields="files(id, name)").execute().get('files', [])
 
@@ -127,8 +122,6 @@ def list_files():
 
         if session_id in SESSION_STORE:
             SESSION_STORE[session_id]["files"] = files_response
-            print(f"✅ Stored files for session {session_id}:")
-            print(json.dumps(SESSION_STORE[session_id]["files"], indent=2))
 
         return jsonify({
             "session_id": session_id,
@@ -142,33 +135,18 @@ def list_files():
 
 @app.route("/user_message", methods=["POST"])
 def user_message():
-    print("🟢 HIT: /user_message endpoint")
     try:
         data = request.get_json(force=True)
-        print(f"📦 Payload: {data}")
-
         session_id = data.get("session_id")
         message = data.get("message", "").lower().strip()
-        print(f"📩 session_id = {session_id}, message = {message}")
 
         if session_id not in SESSION_STORE:
-            print(f"❌ session_id {session_id} not in SESSION_STORE")
             return jsonify({"error": "Invalid session_id"}), 400
-
-        print(f"🧾 Files in SESSION_STORE = {SESSION_STORE[session_id].get('files')}")
-        print(f"[DEBUG] Raw message: {repr(message)}")
-        print(f"[DEBUG] Files in session: {SESSION_STORE[session_id].get('files')}")
 
         if (
             ("upload" in message and ("done" in message or "uploaded" in message)) or
             (message.startswith("yes") and SESSION_STORE[session_id].get("files"))
         ):
-            print("⚙️ Trigger condition met. Preparing GPT2 payload...")
-
-            if not SESSION_STORE[session_id].get("files"):
-                print("🛑 Files are empty at trigger time!")
-                return jsonify({"error": "Files missing. Please call /list_files first."}), 400
-
             payload = {
                 "session_id": session_id,
                 "email": SESSION_STORE[session_id]["email"],
@@ -177,26 +155,18 @@ def user_message():
                 "next_action_webhook": "https://market-gap-analysis.onrender.com/start_market_gap"
             }
 
-            print("📤 Payload to GPT2:")
-            print(json.dumps(payload, indent=2))
-
             try:
                 response = requests.post(GPT2_ENDPOINT, json=payload)
-                print(f"✅ GPT2 responded: {response.status_code}")
-                print(f"🔁 GPT2 response body: {response.text}")
                 sheet.append_row([time.strftime("%Y%m%d%H%M%S"), SESSION_STORE[session_id]["email"],
                                   session_id, SESSION_STORE[session_id]["goal"],
                                   SESSION_STORE[session_id]["folder_url"], "Assessment Triggered"])
                 return jsonify({"status": "triggered"}), 200
             except Exception as post_error:
-                print(f"❌ Error during GPT2 trigger: {post_error}")
                 return jsonify({"error": str(post_error)}), 500
 
-        print("🟡 No matching trigger phrase in message or no files found.")
         return jsonify({"status": "waiting_for_more_input"}), 200
 
     except Exception as e:
-        print(f"❌ Exception in /user_message: {e}")
         return jsonify({"error": str(e)}), 500
 
 @app.route("/", methods=["GET"])

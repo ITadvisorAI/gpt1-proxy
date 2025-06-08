@@ -155,8 +155,7 @@ def user_message():
                 "session_id": session_id,
                 "email": SESSION_STORE[session_id]["email"],
                 "goal": SESSION_STORE[session_id]["goal"],
-                "files": SESSION_STORE[session_id]["files"],
-                "next_action_webhook": "https://market-gap-analysis.onrender.com/start_market_gap"
+                "files": SESSION_STORE[session_id]["files"]                
             }
 
             print(f"[DEBUG] Triggering GPT2 with payload: {json.dumps(payload)[:300]}...")

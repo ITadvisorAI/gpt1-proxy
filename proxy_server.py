@@ -2,14 +2,13 @@ from flask import Flask, request, jsonify
 import requests
 import os
 import time
-import json
 import gspread
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 
 app = Flask(__name__)
 
-GPT2_ENDPOINT = os.getenv("GPT2_ENDPOINT", "https://it-assessment-api.onrender.com/start_assessment")
+GPT2_ENDPOINT = "https://it-assessment-api.onrender.com/start_assessment"  # FIXED directly
 DRIVE_ROOT_FOLDER_ID = os.getenv("DRIVE_ROOT_FOLDER_ID")
 SERVICE_ACCOUNT_FILE = "/etc/secrets/service_account.json"
 SESSION_TRACKER_SHEET_ID = "1eSIPIUaQfnoQD7QCyleHyQv1d9Sfy73Z70pnGl8hrYs"
@@ -154,25 +153,29 @@ def user_message():
                 "next_action_webhook": "https://market-gap-analysis.onrender.com/start_market_gap"
             }
 
-            try:
-                response = requests.post(GPT2_ENDPOINT, json=payload)
-                sheet.append_row([time.strftime("%Y%m%d%H%M%S"), SESSION_STORE[session_id]["email"],
-                                  session_id, SESSION_STORE[session_id]["goal"],
-                                  SESSION_STORE[session_id]["folder_url"], "Assessment Triggered"])
-                return jsonify({"status": "triggered"}), 200
-            except Exception as post_error:
-                return jsonify({"error": str(post_error)}), 500
+            print(f"[DEBUG] Posting to GPT2: {GPT2_ENDPOINT}")
+            print(f"[DEBUG] Payload: {json.dumps(payload, indent=2)}")
+
+            response = requests.post(GPT2_ENDPOINT, json=payload)
+            print(f"[DEBUG] GPT2 Status Code: {response.status_code}")
+            print(f"[DEBUG] GPT2 Response: {response.text}")
+
+            sheet.append_row([time.strftime("%Y%m%d%H%M%S"), SESSION_STORE[session_id]["email"],
+                              session_id, SESSION_STORE[session_id]["goal"],
+                              SESSION_STORE[session_id]["folder_url"], "Assessment Triggered"])
+
+            return jsonify({"status": "triggered"}), 200
 
         return jsonify({"status": "waiting_for_more_input"}), 200
 
     except Exception as e:
+        print("❌ Error in /user_message:", str(e))
         return jsonify({"error": str(e)}), 500
 
 @app.route("/", methods=["GET"])
 def index():
     return "Proxy Server Running", 200
 
-# ✅ ENSURE THIS RUNS IN RENDER ENVIRONMENT
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
     print(f"[INFO] Starting server on port {port}")

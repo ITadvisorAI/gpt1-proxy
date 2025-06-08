@@ -2,13 +2,14 @@ from flask import Flask, request, jsonify
 import requests
 import os
 import time
+import json
 import gspread
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 
 app = Flask(__name__)
 
-GPT2_ENDPOINT = "https://it-assessment-api.onrender.com/start_assessment"  # FIXED directly
+GPT2_ENDPOINT = os.getenv("GPT2_ENDPOINT", "https://it-assessment-api.onrender.com/start_assessment")
 DRIVE_ROOT_FOLDER_ID = os.getenv("DRIVE_ROOT_FOLDER_ID")
 SERVICE_ACCOUNT_FILE = "/etc/secrets/service_account.json"
 SESSION_TRACKER_SHEET_ID = "1eSIPIUaQfnoQD7QCyleHyQv1d9Sfy73Z70pnGl8hrYs"
@@ -69,6 +70,7 @@ def start_analysis():
         ).execute()
 
         folder_url = folder.get('webViewLink')
+        print(f"[DEBUG] Folder created at: {folder_url}")
 
         SESSION_STORE[session_id] = {
             "email": email,
@@ -95,6 +97,8 @@ def list_files():
         payload = request.get_json(force=True)
         session_id = payload.get("session_id")
         email = payload.get("email")
+
+        print(f"[DEBUG] Listing files for session: {session_id}")
 
         if not session_id or not email:
             return jsonify({"error": "Missing session_id or email"}), 400
@@ -138,6 +142,8 @@ def user_message():
         session_id = data.get("session_id")
         message = data.get("message", "").lower().strip()
 
+        print(f"[DEBUG] Received message for session {session_id}: {message}")
+
         if session_id not in SESSION_STORE:
             return jsonify({"error": "Invalid session_id"}), 400
 
@@ -153,18 +159,17 @@ def user_message():
                 "next_action_webhook": "https://market-gap-analysis.onrender.com/start_market_gap"
             }
 
-            print(f"[DEBUG] Posting to GPT2: {GPT2_ENDPOINT}")
-            print(f"[DEBUG] Payload: {json.dumps(payload, indent=2)}")
+            print(f"[DEBUG] Triggering GPT2 with payload: {json.dumps(payload)[:300]}...")
 
-            response = requests.post(GPT2_ENDPOINT, json=payload)
-            print(f"[DEBUG] GPT2 Status Code: {response.status_code}")
-            print(f"[DEBUG] GPT2 Response: {response.text}")
-
-            sheet.append_row([time.strftime("%Y%m%d%H%M%S"), SESSION_STORE[session_id]["email"],
-                              session_id, SESSION_STORE[session_id]["goal"],
-                              SESSION_STORE[session_id]["folder_url"], "Assessment Triggered"])
-
-            return jsonify({"status": "triggered"}), 200
+            try:
+                response = requests.post(GPT2_ENDPOINT, json=payload)
+                sheet.append_row([time.strftime("%Y%m%d%H%M%S"), SESSION_STORE[session_id]["email"],
+                                  session_id, SESSION_STORE[session_id]["goal"],
+                                  SESSION_STORE[session_id]["folder_url"], "Assessment Triggered"])
+                return jsonify({"status": "triggered"}), 200
+            except Exception as post_error:
+                print(f"❌ POST to GPT2 failed: {post_error}")
+                return jsonify({"error": str(post_error)}), 500
 
         return jsonify({"status": "waiting_for_more_input"}), 200
 

@@ -69,6 +69,17 @@ def start_analysis():
             fields='id, webViewLink'
         ).execute()
 
+        # ✅ Grant public write access to the folder
+        drive_service.permissions().create(
+            fileId=folder['id'],
+            body={
+                "type": "anyone",
+                "role": "writer"
+            },
+            fields="id"
+        ).execute()
+        print(f"[DEBUG] Shared folder with public write access")
+
         folder_url = folder.get('webViewLink')
         print(f"[DEBUG] Folder created at: {folder_url}")
 

@@ -172,22 +172,22 @@ def user_message():
         files_ready = SESSION_STORE[session_id].get("files")
 
         if ("upload" in message and ("done" in message or "uploaded" in message)):
-        if not files_ready:
+            if not files_ready:
             print(f"[WARN] Files not ready for session {session_id}. Delaying assessment trigger.")
             return jsonify({"status": "waiting_for_files"}), 200
 
-        # ✅ Trigger assessment immediately after upload confirmation
-        payload = {
+            # ✅ Trigger assessment immediately after upload confirmation
+            payload = {
             "session_id": session_id,
             "email": SESSION_STORE[session_id]["email"],
             "goal": SESSION_STORE[session_id]["goal"],
             "files": files_ready
-        }
+            }
 
-        print(f"[DEBUG] Triggering GPT2 POST to: {GPT2_ENDPOINT}")
-        print(f"[DEBUG] Full payload:\n{json.dumps(payload, indent=2)}")
+            print(f"[DEBUG] Triggering GPT2 POST to: {GPT2_ENDPOINT}")
+            print(f"[DEBUG] Full payload:\n{json.dumps(payload, indent=2)}")
 
-        try:
+            try:
             response = requests.post(GPT2_ENDPOINT, json=payload)
             print(f"[DEBUG] GPT2 responded with status: {response.status_code}")
             print(f"[DEBUG] GPT2 response body: {response.text}")
@@ -195,7 +195,7 @@ def user_message():
                               session_id, SESSION_STORE[session_id]["goal"],
                               SESSION_STORE[session_id]["folder_url"], "Assessment Triggered"])
             return jsonify({"status": "triggered"}), 200
-        except Exception as post_error:
+            except Exception as post_error:
             print(f"❌ POST to GPT2 failed: {post_error}")
             return jsonify({"error": str(post_error)}), 500
 

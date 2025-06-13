@@ -125,7 +125,7 @@ def list_files():
             return jsonify({"error": "Missing session_id or email"}), 400
 
         folder_query = (
-            f"name = '{session_id}' and mimeType = 'application/vnd.google-apps-folder' "
+            f"name = '{session_id}' and mimeType = 'application/vnd.google-apps.folder' "
             "and trashed = false"
         )
         folders = drive_service.files().list(

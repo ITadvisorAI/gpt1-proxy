@@ -136,9 +136,9 @@ def list_files():
                 print(f"⚠️ Could not make file public: {f['name']} – {share_error}")
 
         files_response = [
-        {
-            "file_name": f["name"],
-            "file_url": f"https://drive.google.com/uc?export=download&id={f['id']}",
+            {
+                "file_name": f["name"],
+                "file_url": f"https://drive.google.com/uc?export=download&id={f['id']}",
                 "type": infer_type(f["name"])
             }
             for f in files
@@ -180,10 +180,14 @@ def user_message():
                 "files": SESSION_STORE[session_id]["files"]
             }
 
-            print(f"[DEBUG] Triggering GPT2 with payload: {json.dumps(payload)[:300]}...")
+            print(f"[DEBUG] Triggering GPT2 POST to: {GPT2_ENDPOINT}")
+            print(f"[DEBUG] Full payload:\n{json.dumps(payload, indent=2)}")
 
             try:
                 response = requests.post(GPT2_ENDPOINT, json=payload)
+                print(f"[DEBUG] GPT2 responded with status: {response.status_code}")
+                print(f"[DEBUG] GPT2 response body: {response.text}")
+
                 sheet.append_row([time.strftime("%Y%m%d%H%M%S"), SESSION_STORE[session_id]["email"],
                                   session_id, SESSION_STORE[session_id]["goal"],
                                   SESSION_STORE[session_id]["folder_url"], "Assessment Triggered"])

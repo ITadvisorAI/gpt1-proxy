@@ -136,9 +136,9 @@ def list_files():
                 print(f"⚠️ Could not make file public: {f['name']} – {share_error}")
 
         files_response = [
-            {
-                "file_name": f["name"],
-                "file_url": f["webViewLink"],
+        {
+            "file_name": f["name"],
+            "file_url": f"https://drive.google.com/uc?export=download&id={f['id']}",
                 "type": infer_type(f["name"])
             }
             for f in files

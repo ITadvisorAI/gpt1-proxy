@@ -185,8 +185,7 @@ def user_message():
         }
 
         print(f"[DEBUG] Triggering GPT2 POST to: {GPT2_ENDPOINT}")
-        print(f"[DEBUG] Full payload:
-{json.dumps(payload, indent=2)}")
+        print(f"[DEBUG] Full payload:\n{json.dumps(payload, indent=2)}")
 
         try:
             response = requests.post(GPT2_ENDPOINT, json=payload)
@@ -210,8 +209,7 @@ def user_message():
             }
 
             print(f"[DEBUG] Triggering GPT2 POST to: {GPT2_ENDPOINT}")
-            print(f"[DEBUG] Full payload:
-{json.dumps(payload, indent=2)}")
+            print(f"[DEBUG] Full payload:\n{json.dumps(payload, indent=2)}")
 
             try:
                 response = requests.post(GPT2_ENDPOINT, json=payload)

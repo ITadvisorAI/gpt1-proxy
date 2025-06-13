@@ -173,8 +173,8 @@ def user_message():
 
         if ("upload" in message and ("done" in message or "uploaded" in message)):
             if not files_ready:
-            print(f"[WARN] Files not ready for session {session_id}. Delaying assessment trigger.")
-            return jsonify({"status": "waiting_for_files"}), 200
+                print(f"[WARN] Files not ready for session {session_id}. Delaying assessment trigger.")
+                return jsonify({"status": "waiting_for_files"}), 200
 
             # ✅ Trigger assessment immediately after upload confirmation
             payload = {

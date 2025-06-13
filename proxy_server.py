@@ -125,7 +125,7 @@ def list_files():
             return jsonify({"error": "Missing session_id or email"}), 400
 
         folder_query = (
-            f"name = '{session_id}' and mimeType = 'application/vnd.google-apps.folder' "
+            f"name = '{session_id}' and mimeType = 'application/vnd.google-apps-folder' "
             "and trashed = false"
         )
         folders = drive_service.files().list(
@@ -203,13 +203,39 @@ def user_message():
         if session_id not in SESSION_STORE:
             return jsonify({"error": "Invalid session_id"}), 400
 
+        # Refresh file list inside user_message
+        folder_query = (
+            f"name = '{session_id}' and mimeType = 'application/vnd.google-apps.folder' "
+            "and trashed = false"
+        )
+        folders = drive_service.files().list(
+            q=folder_query,
+            fields="files(id, name)",
+            spaces="drive",
+            supportsAllDrives=True,
+            includeItemsFromAllDrives=True
+        ).execute().get('files', [])
+        if folders:
+            folder_id = folders[0]['id']
+            resp = drive_service.files().list(
+                q=f"'{folder_id}' in parents and trashed = false",
+                spaces="drive",
+                fields="files(id, name, mimeType, webViewLink)",
+                supportsAllDrives=True,
+                includeItemsFromAllDrives=True
+            ).execute()
+            fresh_files = resp.get('files', [])
+            SESSION_STORE[session_id]["files"] = [
+                {"file_name": f["name"], "file_url": f"https://drive.google.com/uc?export=download&id={f['id']}", "type": infer_type(f["name"]) }
+                for f in fresh_files
+            ]
+
         files_ready = SESSION_STORE[session_id].get("files")
 
         if ("upload" in message and ("done" in message or "uploaded" in message)):
             if not files_ready:
                 print(
-                    f"[WARN] Files not ready for session {session_id}. "
-                    "Delaying assessment trigger."
+                    f"[WARN] Files not ready for session {session_id}. Delaying assessment trigger."
                 )
                 return jsonify({"status": "waiting_for_files"}), 200
 
@@ -221,7 +247,7 @@ def user_message():
             }
 
             print(f"[DEBUG] Triggering GPT2 POST to: {GPT2_ENDPOINT}")
-            print(    f"[DEBUG] Full payload:\n{json.dumps(payload, indent=2)}")
+            print(f"[DEBUG] Full payload:\n{json.dumps(payload, indent=2)}")
 
             try:
                 response = requests.post(GPT2_ENDPOINT, json=payload)

@@ -86,10 +86,12 @@ def start_analysis():
         folder_url = folder.get('webViewLink')
         print(f"[DEBUG] Folder created at: {folder_url}")
 
+        # Store folder ID for downstream GPT calls
         SESSION_STORE[session_id] = {
             "email": email,
             "goal": goal,
             "folder_url": folder_url,
+            "folder_id": folder['id'],
             "files": []
         }
 
@@ -243,6 +245,7 @@ def user_message():
                 "session_id": session_id,
                 "email": SESSION_STORE[session_id]["email"],
                 "goal": SESSION_STORE[session_id]["goal"],
+                "folder_id": SESSION_STORE[session_id]["folder_id"],
                 "files": files_ready
             }
 

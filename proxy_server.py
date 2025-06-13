@@ -176,34 +176,35 @@ def user_message():
                 print(f"[WARN] Files not ready for session {session_id}. Delaying assessment trigger.")
                 return jsonify({"status": "waiting_for_files"}), 200
 
-            # ✅ Trigger assessment immediately after upload confirmation
             payload = {
-            "session_id": session_id,
-            "email": SESSION_STORE[session_id]["email"],
-            "goal": SESSION_STORE[session_id]["goal"],
-            "files": files_ready
+                "session_id": session_id,
+                "email": SESSION_STORE[session_id]["email"],
+                "goal": SESSION_STORE[session_id]["goal"],
+                "files": files_ready
             }
 
             print(f"[DEBUG] Triggering GPT2 POST to: {GPT2_ENDPOINT}")
             print(f"[DEBUG] Full payload:\n{json.dumps(payload, indent=2)}")
 
             try:
-            response = requests.post(GPT2_ENDPOINT, json=payload)
-            print(f"[DEBUG] GPT2 responded with status: {response.status_code}")
-            print(f"[DEBUG] GPT2 response body: {response.text}")
-            sheet.append_row([time.strftime("%Y%m%d%H%M%S"), SESSION_STORE[session_id]["email"],
-                              session_id, SESSION_STORE[session_id]["goal"],
-                              SESSION_STORE[session_id]["folder_url"], "Assessment Triggered"])
-            return jsonify({"status": "triggered"}), 200
+                response = requests.post(GPT2_ENDPOINT, json=payload)
+                print(f"[DEBUG] GPT2 responded with status: {response.status_code}")
+                print(f"[DEBUG] GPT2 response body: {response.text}")
+                sheet.append_row([time.strftime("%Y%m%d%H%M%S"), SESSION_STORE[session_id]["email"],
+                                  session_id, SESSION_STORE[session_id]["goal"],
+                                  SESSION_STORE[session_id]["folder_url"], "Assessment Triggered"])
+                return jsonify({"status": "triggered"}), 200
             except Exception as post_error:
-            print(f"❌ POST to GPT2 failed: {post_error}")
-            return jsonify({"error": str(post_error)}), 500
+                print(f"❌ POST to GPT2 failed: {post_error}")
+                return jsonify({"error": str(post_error)}), 500
 
         elif message.startswith("yes"):
             return jsonify({"status": "already_triggered"}), 200
-            return jsonify({"status": "waiting_for_more_input"}), 200
 
+        return jsonify({"status": "waiting_for_more_input"}), 200
     except Exception as e:
+        print("❌ Error in /user_message:", str(e))
+        return jsonify({"error": str(e)}), 500
         print("❌ Error in /user_message:", str(e))
         return jsonify({"error": str(e)}), 500
 

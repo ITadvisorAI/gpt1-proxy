@@ -124,7 +124,6 @@ def list_files():
         if not session_id or not email:
             return jsonify({"error": "Missing session_id or email"}), 400
 
-        # Find the session folder
         folder_query = (
             f"name = '{session_id}' and mimeType = 'application/vnd.google-apps.folder' "
             "and trashed = false"
@@ -132,7 +131,9 @@ def list_files():
         folders = drive_service.files().list(
             q=folder_query,
             fields="files(id, name)",
-            spaces="drive"
+            spaces="drive",
+            supportsAllDrives=True,
+            includeItemsFromAllDrives=True
         ).execute().get('files', [])
 
         if not folders:
@@ -141,7 +142,6 @@ def list_files():
         folder_id = folders[0]['id']
         file_query = f"'{folder_id}' in parents and trashed = false"
 
-        # Capture and log the raw Drive API response
         resp = drive_service.files().list(
             q=file_query,
             spaces="drive",
@@ -156,7 +156,6 @@ def list_files():
 
         files = resp.get('files', [])
 
-        # 🔓 Make each file publicly viewable
         for f in files:
             try:
                 drive_service.permissions().create(
@@ -180,7 +179,6 @@ def list_files():
             for f in files
         ]
 
-        # Update in-memory store
         SESSION_STORE[session_id]["files"] = files_response
 
         return jsonify({
@@ -197,10 +195,10 @@ def list_files():
 def user_message():
     try:
         data = request.get_json(force=True)
+        print(f"[DEBUG] Raw payload: {data}", flush=True)
         session_id = data.get("session_id")
         message = data.get("message", "").lower().strip()
-
-        print(f"[DEBUG] Received message for session {session_id}: {message}")
+        print(f"[DEBUG] Parsed message for session {session_id}: {message}", flush=True)
 
         if session_id not in SESSION_STORE:
             return jsonify({"error": "Invalid session_id"}), 400
@@ -243,7 +241,6 @@ def user_message():
                 print(f"❌ POST to GPT2 failed: {post_error}")
                 return jsonify({"error": str(post_error)}), 500
 
-        # Acknowledge repeat confirmations
         if message.startswith("yes"):
             return jsonify({"status": "already_triggered"}), 200
 

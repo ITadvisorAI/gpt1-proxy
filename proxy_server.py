@@ -115,14 +115,23 @@ def list_files():
             return jsonify({"error": "Missing session_id or email"}), 400
 
         folder_query = f"name = '{session_id}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false"
-        folders = drive_service.files().list(q=folder_query, fields="files(id, name)").execute().get('files', [])
+        folders = drive_service.files().list(
+            q=folder_query,
+            fields="files(id, name)"
+        ).execute().get('files', [])
 
         if not folders:
             return jsonify({"error": f"No folder found for session_id: {session_id}"}), 404
 
         folder_id = folders[0]['id']
         file_query = f"'{folder_id}' in parents and trashed = false"
-        files = drive_service.files().list(q=file_query, fields="files(id, name, mimeType, webViewLink)").execute().get('files', [])
+        files = drive_service.files().list(
+            q=file_query,
+            fields="files(id, name, mimeType, webViewLink)"
+        ).execute().get('files', [])
+
+        # Add debug log for Drive API response
+        print(f"[DEBUG] Drive API returned files: {files}", flush=True)
 
         # 🔓 Make each file publicly viewable
         for f in files:
@@ -203,8 +212,6 @@ def user_message():
 
         return jsonify({"status": "waiting_for_more_input"}), 200
     except Exception as e:
-        print("❌ Error in /user_message:", str(e))
-        return jsonify({"error": str(e)}), 500
         print("❌ Error in /user_message:", str(e))
         return jsonify({"error": str(e)}), 500
 

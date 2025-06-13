@@ -115,23 +115,23 @@ def list_files():
             return jsonify({"error": "Missing session_id or email"}), 400
 
         folder_query = f"name = '{session_id}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false"
-        folders = drive_service.files().list(
-            q=folder_query,
-            fields="files(id, name)"
-        ).execute().get('files', [])
+        folders = drive_service.files().list(q=folder_query, fields="files(id, name)").execute().get('files', [])
 
         if not folders:
             return jsonify({"error": f"No folder found for session_id: {session_id}"}), 404
 
         folder_id = folders[0]['id']
         file_query = f"'{folder_id}' in parents and trashed = false"
-        files = drive_service.files().list(
-            q=file_query,
-            fields="files(id, name, mimeType, webViewLink)"
-        ).execute().get('files', [])
 
-        # Add debug log for Drive API response
-        print(f"[DEBUG] Drive API returned files: {files}", flush=True)
+        # Capture and log the raw Drive API response
+        resp = drive_service.files().list(
+            q=file_query,
+            spaces="drive",
+            fields="files(id, name, mimeType, webViewLink)"
+        ).execute()
+        print(f"[DEBUG] Drive API returned files: {resp.get('files', [])}", flush=True)
+
+        files = resp.get('files', [])
 
         # 🔓 Make each file publicly viewable
         for f in files:
@@ -202,24 +202,3 @@ def user_message():
                 sheet.append_row([time.strftime("%Y%m%d%H%M%S"), SESSION_STORE[session_id]["email"],
                                   session_id, SESSION_STORE[session_id]["goal"],
                                   SESSION_STORE[session_id]["folder_url"], "Assessment Triggered"])
-                return jsonify({"status": "triggered"}), 200
-            except Exception as post_error:
-                print(f"❌ POST to GPT2 failed: {post_error}")
-                return jsonify({"error": str(post_error)}), 500
-
-        elif message.startswith("yes"):
-            return jsonify({"status": "already_triggered"}), 200
-
-        return jsonify({"status": "waiting_for_more_input"}), 200
-    except Exception as e:
-        print("❌ Error in /user_message:", str(e))
-        return jsonify({"error": str(e)}), 500
-
-@app.route("/", methods=["GET"])
-def index():
-    return "Proxy Server Running", 200
-
-if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 10000))
-    print(f"[INFO] Starting server on port {port}")
-    app.run(host="0.0.0.0", port=port)

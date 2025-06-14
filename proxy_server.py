@@ -234,7 +234,10 @@ def user_message():
 
         files_ready = SESSION_STORE[session_id].get("files")
 
-        if ("upload" in message and ("done" in message or "uploaded" in message)):
+        if (
+            ("upload" in message and ("done" in message or "uploaded" in message))
+            or message == "retry"
+        ):
             if not files_ready:
                 print(
                     f"[WARN] Files not ready for session {session_id}. Delaying assessment trigger."

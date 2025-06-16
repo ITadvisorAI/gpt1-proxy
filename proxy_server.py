@@ -86,12 +86,10 @@ def start_analysis():
         folder_url = folder.get('webViewLink')
         print(f"[DEBUG] Folder created at: {folder_url}")
 
-        # Store folder ID for downstream GPT calls
         SESSION_STORE[session_id] = {
             "email": email,
             "goal": goal,
             "folder_url": folder_url,
-            "folder_id": folder['id'],
             "files": []
         }
 
@@ -234,10 +232,7 @@ def user_message():
 
         files_ready = SESSION_STORE[session_id].get("files")
 
-        if (
-            ("upload" in message and ("done" in message or "uploaded" in message))
-            or message == "retry"
-        ):
+        if ("upload" in message and ("done" in message or "uploaded" in message)):
             if not files_ready:
                 print(
                     f"[WARN] Files not ready for session {session_id}. Delaying assessment trigger."
@@ -248,7 +243,6 @@ def user_message():
                 "session_id": session_id,
                 "email": SESSION_STORE[session_id]["email"],
                 "goal": SESSION_STORE[session_id]["goal"],
-                "folder_id": SESSION_STORE[session_id]["folder_id"],
                 "files": files_ready
             }
 

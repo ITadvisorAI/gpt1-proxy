@@ -9,6 +9,11 @@ from googleapiclient.discovery import build
 
 app = Flask(__name__)
 
+@app.route("/healthz", methods=["GET"])
+def health_check():
+    """Simple keep-alive endpoint."""
+    return "OK", 200
+    
 GPT2_ENDPOINT = os.getenv(
     "GPT2_ENDPOINT",
     "https://it-assessment-api.onrender.com/start_assessment"
